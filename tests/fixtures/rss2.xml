@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Memory Journal</title>
+    <link>https://example.com/</link>
+    <description>Research and practical learning.</description>
+    <item>
+      <guid>post-1</guid>
+      <title>How memory changes</title>
+      <link>/post-1</link>
+      <description><![CDATA[<p>A <strong>short</strong> summary.</p>]]></description>
+      <pubDate>Thu, 17 Sep 2026 00:00:00 GMT</pubDate>
+      <author>editor@example.com</author>
+    </item>
+  </channel>
+</rss>

@@ -1,0 +1,1 @@
+export const collocationGenerationPrompt = { version: "collocation-generation.v1", text: "Create 2 to 5 genuinely common collocations for the core sense. Do not manufacture phrases merely to contain the target word." };

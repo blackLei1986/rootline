@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Memory Journal</title>
+  <link rel="alternate" href="https://example.com/" />
+  <link rel="self" href="https://example.com/atom.xml" />
+  <subtitle>Research and practical learning.</subtitle>
+  <entry>
+    <id>post-1</id>
+    <title>How memory changes</title>
+    <link href="/post-1" />
+    <summary type="html">A &lt;strong&gt;short&lt;/strong&gt; summary.</summary>
+    <published>2026-09-17T00:00:00.000Z</published>
+    <author><name>Editor</name></author>
+  </entry>
+</feed>

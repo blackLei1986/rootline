@@ -1,0 +1,1 @@
+export const quizGenerationPrompt = { version: "quiz-generation.v1", text: "Create programmatically checkable quiz candidates. Use one exact answer and plausible but unambiguous distractors. Prefer context cloze over isolated translation." };

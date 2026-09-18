@@ -1,0 +1,40 @@
+{
+  "version": "2026.09.production-v1",
+  "generatedAt": "2026-09-17T07:24:39.841Z",
+  "target": 9000,
+  "acceptedLemmaCount": 9000,
+  "importedAcceptedLemmaCount": 9000,
+  "existingAcceptedLemmaCount": 0,
+  "surfaceFormCount": 23419,
+  "wordFamilyCount": 7474,
+  "tierCounts": {
+    "tier-1-core": 2200,
+    "tier-2-important": 2800,
+    "tier-3-recognition": 3000,
+    "tier-4-extension": 1000
+  },
+  "sources": [
+    {
+      "name": "ECDICT",
+      "license": "MIT",
+      "url": "https://github.com/skywind3000/ECDICT"
+    },
+    {
+      "name": "Open English WordNet 2025",
+      "license": "CC-BY 4.0",
+      "url": "https://en-word.net/"
+    }
+  ],
+  "rejectedBeforeAcceptance": 326808,
+  "quality": {
+    "coreMeaningCoverage": 1,
+    "exampleCoverage": 1,
+    "sourceMetadataCoverage": 1,
+    "tierAssignmentCoverage": 1,
+    "duplicateCriticalErrors": 0,
+    "brokenReferences": 0,
+    "tierDepthIssues": 0
+  },
+  "finalGatePassed": true,
+  "targetGatePassed": true
+}
