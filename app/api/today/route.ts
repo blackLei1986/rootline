@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireVerifiedViewer } from "@/lib/auth/session";
+import { requireVerifiedViewerHttp } from "@/lib/auth/http";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createProductionTodayService } from "@/lib/today/server-service";
 import { getE2ETodayPlan } from "@/lib/today/e2e-fixture";
@@ -10,7 +10,8 @@ export async function GET() {
   if (process.env.ROOTLINE_E2E_FIXTURES === "1") {
     return NextResponse.json(getE2ETodayPlan(), { headers: { "cache-control": "private, no-store" } });
   }
-  const viewer = await requireVerifiedViewer();
+  const viewer = await requireVerifiedViewerHttp();
+  if (viewer instanceof NextResponse) return viewer;
   const learningDate = await getLearningDate(viewer.userId, new Date());
   const plan = await createProductionTodayService().getOrCreateTodayPlan(viewer.userId, learningDate, new Date());
   return NextResponse.json(plan, { headers: { "cache-control": "private, no-store" } });
@@ -20,7 +21,8 @@ export async function POST() {
   if (process.env.ROOTLINE_E2E_FIXTURES === "1") {
     return NextResponse.json(getE2ETodayPlan(), { headers: { "cache-control": "private, no-store" } });
   }
-  const viewer = await requireVerifiedViewer();
+  const viewer = await requireVerifiedViewerHttp();
+  if (viewer instanceof NextResponse) return viewer;
   const now = new Date();
   const learningDate = await getLearningDate(viewer.userId, now);
   const plan = await createProductionTodayService().regenerateUnstartedTodayPlan(viewer.userId, learningDate, now);

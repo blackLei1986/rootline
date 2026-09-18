@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireVerifiedViewer } from "@/lib/auth/session";
+import { requireVerifiedViewerHttp } from "@/lib/auth/http";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { SupabaseFeedRepository } from "@/lib/repositories/supabase/feed-repository";
 import { recordArticleBundleEncounters } from "@/lib/reading/server-encounters";
@@ -15,7 +15,8 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const viewer = await requireVerifiedViewer();
+  const viewer = await requireVerifiedViewerHttp();
+  if (viewer instanceof NextResponse) return viewer;
   const state = schema.parse(await request.json());
   const { id } = await params;
   const client = createAdminSupabaseClient();

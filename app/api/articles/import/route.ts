@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireVerifiedViewer } from "@/lib/auth/session";
+import { requireVerifiedViewerHttp } from "@/lib/auth/http";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { SupabaseFeedRepository } from "@/lib/repositories/supabase/feed-repository";
 import { safeFetchText } from "@/lib/feeds/safe-fetch";
@@ -10,7 +10,8 @@ import { fingerprintArticle } from "@/lib/articles/fingerprint";
 const schema = z.object({ url: z.url() });
 
 export async function POST(request: Request) {
-  const viewer = await requireVerifiedViewer();
+  const viewer = await requireVerifiedViewerHttp();
+  if (viewer instanceof NextResponse) return viewer;
   const input = schema.parse(await request.json());
   const response = await safeFetchText(input.url, "article");
   const article = extractArticle(response.text, response.finalUrl);

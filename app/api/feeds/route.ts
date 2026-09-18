@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireVerifiedViewer } from "@/lib/auth/session";
+import { requireVerifiedViewerHttp } from "@/lib/auth/http";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { SupabaseFeedRepository } from "@/lib/repositories/supabase/feed-repository";
 import { safeFetchText } from "@/lib/feeds/safe-fetch";
@@ -9,7 +9,8 @@ import { parseFeed } from "@/lib/feeds/parser";
 const subscribeSchema = z.object({ url: z.url() });
 
 export async function GET() {
-  const viewer = await requireVerifiedViewer();
+  const viewer = await requireVerifiedViewerHttp();
+  if (viewer instanceof NextResponse) return viewer;
   const repository = new SupabaseFeedRepository(createAdminSupabaseClient());
   return NextResponse.json(
     { sources: await repository.listSourcesForUser(viewer.userId) },
@@ -18,7 +19,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const viewer = await requireVerifiedViewer();
+  const viewer = await requireVerifiedViewerHttp();
+  if (viewer instanceof NextResponse) return viewer;
   const input = subscribeSchema.parse(await request.json());
   const response = await safeFetchText(input.url, "feed");
   const feed = parseFeed(response.text, response.finalUrl);
@@ -30,7 +32,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const viewer = await requireVerifiedViewer();
+  const viewer = await requireVerifiedViewerHttp();
+  if (viewer instanceof NextResponse) return viewer;
   const sourceId = new URL(request.url).searchParams.get("sourceId");
   if (!sourceId) return NextResponse.json({ message: "缺少订阅源。" }, { status: 400 });
   const repository = new SupabaseFeedRepository(createAdminSupabaseClient());

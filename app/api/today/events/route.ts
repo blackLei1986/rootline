@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireVerifiedViewer } from "@/lib/auth/session";
+import { requireVerifiedViewerHttp } from "@/lib/auth/http";
 import { createProductionTodayEventService } from "@/lib/today/server-service";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { SupabaseTodayRepository } from "@/lib/repositories/supabase/today-repository";
@@ -22,7 +22,8 @@ export async function GET(request: Request) {
   if (process.env.ROOTLINE_E2E_FIXTURES === "1") {
     return NextResponse.json(getE2ETodaySession(), { headers: { "cache-control": "private, no-store" } });
   }
-  const viewer = await requireVerifiedViewer();
+  const viewer = await requireVerifiedViewerHttp();
+  if (viewer instanceof NextResponse) return viewer;
   const planId = new URL(request.url).searchParams.get("planId");
   if (!planId) return NextResponse.json({ message: "缺少 Today 计划。" }, { status: 400 });
   const session = await createProductionTodayEventService().getTodaySession(viewer.userId, planId);
@@ -34,7 +35,8 @@ export async function POST(request: Request) {
     const event = eventSchema.parse(await request.json());
     return NextResponse.json(recordE2ETodayEvent(event), { headers: { "cache-control": "private, no-store" } });
   }
-  const viewer = await requireVerifiedViewer();
+  const viewer = await requireVerifiedViewerHttp();
+  if (viewer instanceof NextResponse) return viewer;
   const event = eventSchema.parse(await request.json());
   const session = await createProductionTodayEventService().recordTodayEvent(viewer.userId, event);
   if (event.type === "article_completed") {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireVerifiedViewer } from "@/lib/auth/session";
+import { requireVerifiedViewerHttp } from "@/lib/auth/http";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { SupabaseFeedRepository } from "@/lib/repositories/supabase/feed-repository";
 import { assertPublicHttpUrl, nodeHostResolver } from "@/lib/feeds/network-policy";
@@ -9,7 +9,8 @@ import { parseOpml, serializeOpml } from "@/lib/feeds/opml";
 const importSchema = z.object({ xml: z.string().min(1).max(2 * 1024 * 1024) });
 
 export async function GET() {
-  const viewer = await requireVerifiedViewer();
+  const viewer = await requireVerifiedViewerHttp();
+  if (viewer instanceof NextResponse) return viewer;
   const repository = new SupabaseFeedRepository(createAdminSupabaseClient());
   const sources = await repository.listSourcesForUser(viewer.userId);
   const xml = serializeOpml(sources.map((source) => ({
@@ -27,7 +28,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const viewer = await requireVerifiedViewer();
+  const viewer = await requireVerifiedViewerHttp();
+  if (viewer instanceof NextResponse) return viewer;
   const input = importSchema.parse(await request.json());
   const subscriptions = parseOpml(input.xml);
   const repository = new SupabaseFeedRepository(createAdminSupabaseClient());
