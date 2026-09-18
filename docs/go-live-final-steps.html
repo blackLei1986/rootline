@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rootline V0.1 上线 · 最后两步图文指引</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --card: #ffffff;
+    --ink: #1a1d24;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --green: #16a34a;
+    --green-bg: #ecfdf5;
+    --orange: #ea580c;
+    --orange-bg: #fff7ed;
+    --red: #dc2626;
+    --red-bg: #fef2f2;
+    --blue: #2563eb;
+    --blue-bg: #eff6ff;
+    --mono-bg: #0f172a;
+    --mono-ink: #e2e8f0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.65;
+    padding: 32px 16px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  header.hero {
+    background: linear-gradient(135deg, #1e3a8a, #2563eb);
+    color: #fff;
+    border-radius: 16px;
+    padding: 28px 28px;
+    margin-bottom: 20px;
+  }
+  header.hero h1 { font-size: 22px; margin-bottom: 6px; }
+  header.hero p { opacity: .92; font-size: 14px; }
+  .status-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 20px 0; }
+  .status { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; text-align: center; }
+  .status .tag { font-size: 12px; color: var(--muted); }
+  .status .val { font-size: 13px; font-weight: 600; margin-top: 4px; }
+  .status.done { border-color: #bbf7d0; background: var(--green-bg); }
+  .status.done .val { color: var(--green); }
+  .status.todo { border-color: #fed7aa; background: var(--orange-bg); }
+  .status.todo .val { color: var(--orange); }
+  section.step {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 18px;
+  }
+  section.step h2 {
+    font-size: 18px;
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 4px;
+  }
+  .stepnum {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--blue); color: #fff; font-size: 15px; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .step-sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; margin-left: 38px; }
+  .substep { margin: 14px 0; padding: 14px 16px; border-left: 3px solid var(--blue); background: var(--blue-bg); border-radius: 0 10px 10px 0; }
+  .substep h3 { font-size: 15px; margin-bottom: 6px; }
+  .substep p, .substep li { font-size: 14px; color: #374151; }
+  .substep ol, .substep ul { margin: 6px 0 6px 20px; }
+  .substep code, code {
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    background: var(--mono-bg); color: var(--mono-ink);
+    padding: 1px 6px; border-radius: 5px; font-size: 13px;
+    word-break: break-all;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+  th, td { border: 1px solid var(--line); padding: 9px 10px; text-align: left; vertical-align: top; }
+  th { background: #f1f5f9; font-weight: 600; }
+  td code { font-size: 12px; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .badge.pub { background: var(--green-bg); color: var(--green); }
+  .badge.secret { background: var(--red-bg); color: var(--red); }
+  .badge.custom { background: var(--blue-bg); color: var(--blue); }
+  .note { background: var(--orange-bg); border: 1px solid #fed7aa; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #7c2d12; margin-top: 12px; }
+  .warn { background: var(--red-bg); border: 1px solid #fecaca; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #7f1d1d; margin-top: 12px; }
+  .checklist { list-style: none; margin-top: 8px; }
+  .checklist li { padding: 8px 0 8px 30px; position: relative; font-size: 14px; border-bottom: 1px dashed var(--line); }
+  .checklist li::before { content: "☐"; position: absolute; left: 4px; color: var(--blue); font-size: 16px; }
+  @media (max-width: 640px) {
+    .status-grid { grid-template-columns: repeat(2, 1fr); }
+    header.hero { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>🚀 Rootline V0.1 上线 · 最后两步图文指引</h1>
+    <p>数据库已建好、代码已推送，只剩「Supabase Auth 配置」和「部署 Vercel」两步。照着点，约 15 分钟。</p>
+  </header>
+
+  <div class="status-grid">
+    <div class="status done"><div class="tag">① 代码推送</div><div class="val">✅ 已完成</div></div>
+    <div class="status done"><div class="tag">② Supabase 建表</div><div class="val">✅ 已完成</div></div>
+    <div class="status todo"><div class="tag">③ Auth 配置</div><div class="val">⏳ 待做（Step A）</div></div>
+    <div class="status todo"><div class="tag">④ 部署 Vercel</div><div class="val">⏳ 待做（Step B）</div></div>
+  </div>
+
+  <!-- ===================== STEP A ===================== -->
+  <section class="step">
+    <h2><span class="stepnum">A</span>Supabase Auth 配置（约 5 分钟）</h2>
+    <div class="step-sub">目标：让注册能发验证邮件、验证链接能跳回你的网站。</div>
+
+    <div class="substep">
+      <h3>A1 · 打开 Supabase 控制台</h3>
+      <p>浏览器打开 <code>https://supabase.com/dashboard</code>，点进你的项目（项目地址是 <code>https://bwkpcljqjgzrmvnthnkf.supabase.co</code>）。</p>
+    </div>
+
+    <div class="substep">
+      <h3>A2 · 开启邮箱确认（Confirm email）</h3>
+      <ol>
+        <li>左侧菜单点 <code>Authentication</code>（认证）</li>
+        <li>顶部切到 <code>Sign In / Providers</code> 标签</li>
+        <li>找到 <code>Email</code> 区块，把 <b>Confirm email</b> 开关 <b>打开</b></li>
+        <li>（可选）把 <b>Allow anonymous sign-ins</b> 保持 <b>关闭</b></li>
+      </ol>
+    </div>
+
+    <div class="substep">
+      <h3>A3 · 配置回调地址（最关键）</h3>
+      <ol>
+        <li>在 <code>Authentication</code> 下，点左侧 <code>URL Configuration</code></li>
+        <li><b>Site URL</b> 填：<code>https://rootline.vercel.app</code>（先按这个填，部署后如域名不同再回来改）</li>
+        <li><b>Redirect URLs</b> 点 <code>Add URL</code>，加入下面两条：<br>
+          <code>http://localhost:3000/auth/callback</code>（本地调试用）<br>
+          <code>https://rootline.vercel.app/auth/callback</code>（生产用）</li>
+        <li>点 <b>Save</b></li>
+      </ol>
+    </div>
+
+    <div class="note">💡 <b>顺序提示</b>：域名（rootline.vercel.app）要等部署后才知道最终值。可以先按上面填，等 Step B 部署完拿到真实域名后，再回来核对一次即可。</div>
+  </section>
+
+  <!-- ===================== STEP B ===================== -->
+  <section class="step">
+    <h2><span class="stepnum">B</span>部署到 Vercel（约 10 分钟）</h2>
+    <div class="step-sub">目标：把 GitHub 上的代码跑成一个公网网站。</div>
+
+    <div class="substep">
+      <h3>B1 · 导入项目</h3>
+      <ol>
+        <li>打开 <code>https://vercel.com</code>，用你的 <b>GitHub 账号</b>登录（就是 blackLei1986）</li>
+        <li>点 <code>Add New…</code> → <code>Project</code></li>
+        <li>在仓库列表里找到并点 <b>Import</b> 你的 <code>rootline</code> 仓库</li>
+        <li>框架会自动识别为 <b>Next.js</b>，构建命令、输出目录都用默认值，<b>不用改</b></li>
+      </ol>
+    </div>
+
+    <div class="substep">
+      <h3>B2 · 填环境变量（8 个，照着填）</h3>
+      <p>在 <code>Environment Variables</code> 区逐个添加。带 <span class="badge secret">敏感</span> 的值从你本地 <code>.env.local</code> 文件里复制。</p>
+      <table>
+        <tr><th>变量名</th><th>填什么值</th><th>怎么拿</th></tr>
+        <tr><td><code>NEXT_PUBLIC_SUPABASE_URL</code></td><td><code>https://bwkpcljqjgzrmvnthnkf.supabase.co</code></td><td>直接复制这一栏</td></tr>
+        <tr><td><code>NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</code></td><td><span class="badge pub">公开</span> 从 .env.local 复制</td><td>打开本地 <code>.env.local</code>，复制对应值</td></tr>
+        <tr><td><code>SUPABASE_SERVICE_ROLE_KEY</code></td><td><span class="badge secret">敏感</span> 从 .env.local 复制</td><td>同上，<b>仅服务端，绝不外传</b></td></tr>
+        <tr><td><code>NEXT_PUBLIC_SITE_URL</code></td><td><code>https://rootline.vercel.app</code></td><td>先填这个，部署后如域名不同再改</td></tr>
+        <tr><td><code>CRON_SECRET</code></td><td><span class="badge custom">自定</span> 随机长字符串</td><td>终端跑 <code>openssl rand -hex 32</code> 生成</td></tr>
+        <tr><td><code>FEED_FETCH_CONTACT</code></td><td>你的邮箱</td><td>随便填个真实邮箱</td></tr>
+        <tr><td><code>CLOUD_LEARNING_ENABLED</code></td><td><code>false</code></td><td>本轮先关，验证通过后再开</td></tr>
+        <tr><td><code>RSS_READING_ENABLED</code></td><td><code>false</code></td><td>同上</td></tr>
+      </table>
+      <div class="warn">⚠️ <code>SUPABASE_SERVICE_ROLE_KEY</code> 是最高权限密钥，只能填在 Vercel 的环境变量里，<b>绝不能写进代码或公开文档</b>。</div>
+    </div>
+
+    <div class="substep">
+      <h3>B3 · 部署</h3>
+      <ol>
+        <li>点 <code>Deploy</code>，等 1–3 分钟构建完成</li>
+        <li>构建成功后 Vercel 会显示一个网址，形如 <code>https://rootline.vercel.app</code>（也可能带随机后缀，如 <code>rootline-abc123.vercel.app</code>）</li>
+        <li><b>记下这个真实域名</b>，下一步要用</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ===================== 收尾 ===================== -->
+  <section class="step">
+    <h2><span class="stepnum">C</span>部署后收尾（把真实域名填回去）</h2>
+    <div class="step-sub">拿到真实域名后，回来核对两处，确保验证邮件链接指向正确地址。</div>
+    <div class="substep">
+      <ol>
+        <li><b>Vercel</b> → 你的项目 → Settings → Environment Variables：如果 <code>NEXT_PUBLIC_SITE_URL</code> 填的和真实域名不一致，改成真实域名，<b>重新 Deploy 一次</b></li>
+        <li><b>Supabase</b> → Authentication → URL Configuration：把 <code>Site URL</code> 和 <code>Redirect URLs</code> 里的 <code>rootline.vercel.app</code> 替换成真实域名（保留 localhost 那条）</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ===================== 验证 ===================== -->
+  <section class="step">
+    <h2><span class="stepnum">D</span>上线验证清单（Smoke Test）</h2>
+    <div class="step-sub">部署完成后，逐项打勾，全通过即代表 V0.1 上线成功。</div>
+    <ul class="checklist">
+      <li>首页 <code>/</code> 能正常打开，不是报错页</li>
+      <li>未登录访问 <code>/today</code> → 出现「去登录」按钮（不再是「无法加载」）</li>
+      <li>注册账号 → 邮箱收到验证邮件 → 点链接 → 自动登录成功</li>
+      <li>登录后 <code>/today</code> 能生成今日学习计划</li>
+      <li>走一遍核心链路：开始学习 → 看答案 → 评分(1/2/3/4) → 下一词 → 刷新页面 → 进度还在</li>
+      <li><code>/progress</code> 显示 Learned / Mastered / Due / Goal 四个指标</li>
+    </ul>
+  </section>
+
+  <!-- ===================== 常见问题 ===================== -->
+  <section class="step">
+    <h2>常见问题速查</h2>
+    <table>
+      <tr><th>症状</th><th>原因</th><th>解决</th></tr>
+      <tr><td>验证邮件链接跳到 localhost</td><td><code>NEXT_PUBLIC_SITE_URL</code> 或 Auth 的 Site URL 没改成生产域名</td><td>回 Step C 核对两处</td></tr>
+      <tr><td>收不到验证邮件</td><td>Confirm email 没开 / 邮箱进了垃圾箱</td><td>回 Step A2，顺便查垃圾箱</td></tr>
+      <tr><td>登录后 <code>/today</code> 报 500</td><td>Supabase 表没建全</td><td>（你已建好，若复现再跑一次 apply-all.sql）</td></tr>
+      <tr><td>Vercel 部署的是旧代码</td><td>没 push 到 GitHub</td><td>（你已 push，若复现检查 git 状态）</td></tr>
+    </table>
+  </section>
+
+</div>
+</body>
+</html>

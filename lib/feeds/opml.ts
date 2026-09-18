@@ -1,5 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
-import { JSDOM } from "jsdom";
+import { decodeAndNormalizeWhitespace } from "@/lib/feeds/html-entities";
 import { FEED_LIMITS, type OpmlSubscription } from "@/types/feeds";
 
 const parser = new XMLParser({
@@ -70,7 +70,7 @@ function safeUrl(value: string): string | null {
 }
 
 function plainText(value: string): string {
-  return JSDOM.fragment(value).textContent?.replace(/\s+/g, " ").trim() ?? "";
+  return decodeAndNormalizeWhitespace(value);
 }
 
 function string(value: unknown): string {

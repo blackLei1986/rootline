@@ -1,8 +1,8 @@
 # Rootline V0.1 公网部署清单
 
 > 目标：把当前代码部署到 Vercel，做第一轮真实用户测试。
-> 当前状态：代码 build/test 全绿，但 Supabase 尚未建表，部署前必须完成下面 4 步。
-> 预计耗时：约 20–30 分钟（其中 Supabase 建表 2 分钟、Auth 配置 5 分钟、Vercel 10 分钟）。
+> 当前状态（2026-09-18 复查）：代码已推送到 GitHub、Supabase 35 张表已建好 + RLS 生效，仅剩 Auth 配置 + Vercel 部署两步。
+> 图文版指引见 `docs/go-live-final-steps.html`。
 
 ---
 

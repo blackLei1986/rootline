@@ -1,6 +1,6 @@
 import { XMLParser } from "fast-xml-parser";
-import { JSDOM } from "jsdom";
 import { FeedNetworkError } from "@/lib/feeds/network-policy";
+import { decodeAndNormalizeWhitespace } from "@/lib/feeds/html-entities";
 import type { NormalizedFeed, NormalizedFeedEntry } from "@/types/feeds";
 
 const parser = new XMLParser({
@@ -94,9 +94,7 @@ function normalizeAtomEntry(
 function optionalText(value: unknown): string | null {
   const raw = text(value);
   if (!raw) return null;
-  const decoded = JSDOM.fragment(raw).textContent ?? "";
-  const normalized = JSDOM.fragment(decoded).textContent?.replace(/\s+/g, " ").trim() ?? "";
-  return normalized || null;
+  return decodeAndNormalizeWhitespace(raw) || null;
 }
 
 function requiredText(value: unknown): string {
