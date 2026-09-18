@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { WordCard } from "@/components/word-card";
+import { WordFamilyTree } from "@/components/word-family-tree";
+import { RootStudyFlow } from "@/components/root-study-flow";
 import { getRootById, roots } from "@/data/roots";
 import { getWordsByRoot } from "@/data/words";
 import { RootLearningSummary } from "@/components/root-learning-summary";
@@ -49,6 +51,16 @@ export default async function RootDetailPage({ params }: { params: Promise<{ roo
       </section>
 
       <section className="mt-6 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]"><Card><CardContent className="p-6"><div className="flex items-center gap-2 font-bold"><Sparkles className="size-5 text-[var(--primary)]" />为什么值得学</div><p className="mt-3 text-sm leading-7 text-[var(--muted-foreground)]">{root.learningRationale}</p></CardContent></Card><RootLearningSummary rootId={root.id} /></section>
+
+      <section className="mt-12">
+        <div className="mb-6"><div className="flex items-center gap-2 text-[var(--primary)]"><Languages className="size-4" /><span className="label-caps text-xs font-bold">Word family tree</span></div><h2 className="mt-2 text-2xl font-bold">词族树</h2></div>
+        <WordFamilyTree rootId={root.id} />
+      </section>
+
+      <section className="mt-12">
+        <div className="mb-6"><div className="flex items-center gap-2 text-[var(--primary)]"><Sparkles className="size-4" /><span className="label-caps text-xs font-bold">Study flow</span></div><h2 className="mt-2 text-2xl font-bold">词根学习流程</h2></div>
+        <RootStudyFlow rootId={root.id} />
+      </section>
 
       <section className="mt-12">
         <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div><div className="flex items-center gap-2 text-[var(--primary)]"><Languages className="size-4" /><span className="label-caps text-xs font-bold">Word tree</span></div><h2 className="mt-2 text-2xl font-bold">词根单词树</h2></div><p className="text-sm text-[var(--muted-foreground)]">按使用频率优先展示</p></div>

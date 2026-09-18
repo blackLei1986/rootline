@@ -85,6 +85,12 @@ export interface WordProgress {
   memoryStrength: number;
   difficulty: number;
   intervalMinutes: number;
+  /** FSRS memory stability in days (authoritative scheduler state). */
+  stability: number;
+  /** FSRS card state: 0=New 1=Learning 2=Review 3=Relearning. */
+  fsrsState: number;
+  /** FSRS completed short-term learning steps. */
+  learningSteps: number;
   lastReviewedAt: string | null;
   nextReviewAt: string | null;
   firstLearnedAt: string | null;
@@ -100,6 +106,22 @@ export interface RootProgress {
   mastery: number;
   lastReviewedAt: string | null;
   nextReviewAt: string | null;
+  // --- root learning mode (v1): adaptive skill scores + word-family stats ---
+  /** Recognition skill 0..100 (seeing the root -> recalling its meaning). */
+  recognitionScore: number;
+  /** Derivation skill 0..100 (decomposing a word into root + affixes). */
+  derivationScore: number;
+  /** Inference skill 0..100 (guessing an unseen word's meaning from the root). */
+  inferenceScore: number;
+  /** Word-family members the learner has encountered. */
+  wordsSeen: number;
+  /** Word-family members the learner has mastered (per-word mastered). */
+  wordsMastered: number;
+  /** Inference challenge attempts / correct count for accuracy tracking. */
+  inferenceAttempts: number;
+  inferenceCorrect: number;
+  /** Which stage of the 4-stage flow was last completed (0 = not started). */
+  lastStage: number;
 }
 
 export interface DailyStats {

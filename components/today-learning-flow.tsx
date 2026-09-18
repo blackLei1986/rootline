@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, Brain, Check, Eye, Gauge, LoaderCircle, RotateCcw, Trophy } from "lucide-react";
+import { ArrowRight, Brain, Check, Eye, Gauge, LoaderCircle, RotateCcw, Trophy, Volume2 } from "lucide-react";
 import { ArticleContextQuiz } from "@/components/today/article-context-quiz";
 import { ArticleReadingStage } from "@/components/today/article-reading-stage";
 import { TodaySetup } from "@/components/today/today-setup";
@@ -10,7 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { getWordBreakdownPieces } from "@/components/word-breakdown";
+import { getPhrasesByWord } from "@/data/learning-content";
+import { getWordById } from "@/data/words";
 import { markWordIntroduced, recordWordAnswer } from "@/lib/learning-actions";
+import { speakWord } from "@/lib/pronounce";
 import { recordWordRecognition } from "@/lib/recognition-progress";
 import { cn } from "@/lib/utils";
 import { queueSyncPayload } from "@/lib/sync/offline-queue";
@@ -31,6 +35,7 @@ export function TodayLearningFlow({ initialPlan, onEvent }: { initialPlan?: Toda
   const [revealed, setRevealed] = useState(false);
   const [loading, setLoading] = useState(!initialPlan);
   const [error, setError] = useState("");
+  const [needsLogin, setNeedsLogin] = useState(false);
   const itemStartedAt = useRef(0);
   const eventChain = useRef(Promise.resolve());
 
@@ -39,6 +44,13 @@ export function TodayLearningFlow({ initialPlan, onEvent }: { initialPlan?: Toda
     let active = true;
     fetch("/api/today", { cache: "no-store" })
       .then(async (response) => {
+        if (response.status === 401) {
+          setNeedsLogin(true);
+          throw new Error("AUTH_REQUIRED");
+        }
+        if (response.status === 403) {
+          throw new Error("邮箱尚未验证：请先到邮箱点击验证链接，再回来开始今日学习。");
+        }
         if (!response.ok) throw new Error("今日计划加载失败");
         return response.json() as Promise<TodayPlanDTO>;
       })
@@ -64,6 +76,27 @@ export function TodayLearningFlow({ initialPlan, onEvent }: { initialPlan?: Toda
       .map((result) => plan.rapidScanEntries.find((entry) => entry.id === result.id))
       .filter((entry): entry is ProductionVocabularyEntry => Boolean(entry));
   }, [plan, results]);
+
+  const currentWordText = useMemo(() => {
+    if (!plan) return "";
+    if (phase === "warmup") return plan.warmupReviewEntries[index]?.word ?? "";
+    if (phase === "scan") return plan.rapidScanEntries[index]?.word ?? "";
+    if (phase === "learn") return focused[index]?.word ?? "";
+    return "";
+  }, [plan, phase, index, focused]);
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTyping = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+      if ((event.key === "p" || event.key === "P") && !isTyping) {
+        event.preventDefault();
+        speakWord(currentWordText);
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [currentWordText]);
 
   const emit = (event: TodayStageEvent) => {
     if (!plan) return;
@@ -146,6 +179,7 @@ export function TodayLearningFlow({ initialPlan, onEvent }: { initialPlan?: Toda
   };
 
   if (loading) return <div className="page-shell flex min-h-[65vh] items-center justify-center gap-2 text-sm text-[var(--muted-foreground)]"><LoaderCircle className="size-4 animate-spin" />正在从 9000 词中编排今日候选词</div>;
+  if (needsLogin) return <div className="page-shell py-20 text-center"><h1 className="text-2xl font-bold">开始学习前请先登录</h1><p className="mt-3 text-sm text-[var(--muted-foreground)]">登录并验证邮箱后，即可开始今日学习。</p><div className="mt-6"><Button asChild size="lg"><Link href="/login?next=/today">去登录 <ArrowRight className="size-4" /></Link></Button></div></div>;
   if (error || !plan) return <div className="page-shell py-20 text-center"><h1 className="text-2xl font-bold">今日计划暂时无法加载</h1><p className="mt-3 text-sm text-rose-700">{error}</p></div>;
   if (phase === "setup") return <TodaySetup plan={plan} onStart={start} />;
   if (phase === "summary") return <TodaySummary plan={plan} results={results} focused={focused} quizCorrect={quizCorrect} onRestart={() => { setResults([]); setQuizCorrect(0); setPhase("setup"); }} />;
@@ -163,17 +197,33 @@ export function TodayLearningFlow({ initialPlan, onEvent }: { initialPlan?: Toda
 
 function RecallCard({ entry, index, total, revealed, onReveal, onRate }: { entry?: ProductionVocabularyEntry; index: number; total: number; revealed: boolean; onReveal: () => void; onRate: (correct: boolean) => void }) {
   if (!entry) return null;
-  return <StageCard eyebrow={`热身复习 ${index + 1} / ${total}`} icon={RotateCcw}><h1 className="text-5xl font-bold">{entry.word}</h1><p className="mt-3 text-[var(--muted-foreground)]">先在心里回想含义</p>{revealed ? <div className="mt-7 rounded-2xl bg-[var(--primary-soft)] p-6"><p className="text-2xl font-bold text-[var(--primary)]">{entry.coreMeaningZh}</p><p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">{entry.example}</p></div> : <Button variant="outline" className="mt-7" onClick={onReveal}><Eye className="size-4" />显示答案</Button>}<div className="mt-7 grid grid-cols-2 gap-3"><Button variant="outline" size="lg" onClick={() => onRate(false)}>没想起来</Button><Button size="lg" onClick={() => onRate(true)}><Check className="size-4" />想起来了</Button></div></StageCard>;
+  return <StageCard eyebrow={`热身复习 ${index + 1} / ${total}`} icon={RotateCcw}><h1 className="text-5xl font-bold">{entry.word}</h1><SpeakerButton text={entry.word} /><p className="mt-3 text-[var(--muted-foreground)]">先在心里回想含义</p>{revealed ? <div className="mt-7 rounded-2xl bg-[var(--primary-soft)] p-6"><p className="text-2xl font-bold text-[var(--primary)]">{entry.coreMeaningZh}</p><p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">{entry.example}</p></div> : <Button variant="outline" className="mt-7" onClick={onReveal}><Eye className="size-4" />显示答案</Button>}<div className="mt-7 grid grid-cols-2 gap-3"><Button variant="outline" size="lg" onClick={() => onRate(false)}>没想起来</Button><Button size="lg" onClick={() => onRate(true)}><Check className="size-4" />想起来了</Button></div></StageCard>;
 }
 
 function ScanCard({ entry, index, total, revealed, onReveal, onClassify }: { entry?: ProductionVocabularyEntry; index: number; total: number; revealed: boolean; onReveal: () => void; onClassify: (state: RecognitionState) => void }) {
   if (!entry) return null;
-  return <StageCard eyebrow={`快速扫词 ${index + 1} / ${total}`} icon={Gauge}><h1 className="text-6xl font-bold tracking-[-0.05em]">{entry.word}</h1><p className="mt-3 text-[var(--muted-foreground)]">{entry.phonetic || entry.partOfSpeech.join(" · ")}</p>{revealed ? <div className="mt-7 rounded-2xl bg-[var(--primary-soft)] p-6"><p className="text-2xl font-bold text-[var(--primary)]">{entry.coreMeaningZh}</p></div> : <Button variant="outline" className="mt-7" onClick={onReveal}><Eye className="size-4" />显示释义</Button>}<div className="mt-8 grid gap-3 sm:grid-cols-3"><ClassifyButton state="known" label="认识" onClick={onClassify} /><ClassifyButton state="fuzzy" label="模糊" onClick={onClassify} /><ClassifyButton state="unknown" label="不会" onClick={onClassify} /></div></StageCard>;
+  return <StageCard eyebrow={`快速扫词 ${index + 1} / ${total}`} icon={Gauge}><h1 className="text-6xl font-bold tracking-[-0.05em]">{entry.word}</h1><SpeakerButton text={entry.word} /><p className="mt-3 text-[var(--muted-foreground)]">{entry.phonetic || entry.partOfSpeech.join(" · ")}</p>{revealed ? <div className="mt-7 rounded-2xl bg-[var(--primary-soft)] p-6"><p className="text-2xl font-bold text-[var(--primary)]">{entry.coreMeaningZh}</p></div> : <Button variant="outline" className="mt-7" onClick={onReveal}><Eye className="size-4" />显示释义</Button>}<div className="mt-8 grid gap-3 sm:grid-cols-3"><ClassifyButton state="known" label="认识" onClick={onClassify} /><ClassifyButton state="fuzzy" label="模糊" onClick={onClassify} /><ClassifyButton state="unknown" label="不会" onClick={onClassify} /></div></StageCard>;
 }
 
 function LearnCard({ entry, onContinue }: { entry?: ProductionVocabularyEntry; onContinue: () => void }) {
   if (!entry) return null;
-  return <StageCard eyebrow="重点学习" icon={Brain}><h1 className="text-5xl font-bold">{entry.word}</h1><p className="mt-2 text-sm text-[var(--muted-foreground)]">{entry.phonetic} · {entry.partOfSpeech.join(" / ")}</p><div className="mt-7 rounded-2xl bg-[var(--primary-soft)] p-6"><p className="text-2xl font-bold text-[var(--primary)]">{entry.coreMeaningZh}</p><p className="mt-3 leading-7 text-[var(--muted-foreground)]">{entry.coreDefinitionEn}</p></div><p className="mt-6 rounded-xl border p-5 text-left leading-7">{entry.example}</p><Button size="lg" className="mt-7" onClick={onContinue}>继续 <ArrowRight className="size-4" /></Button></StageCard>;
+  // Production entries already carry word / phonetic / core meaning / example.
+  // Root breakdown and phrases are optional extras, available only for words
+  // that have explicit morphological data in the static word bank.
+  const fullWord = getWordById(entry.id);
+  const phrases = fullWord ? getPhrasesByWord(fullWord.id).slice(0, 3) : [];
+  const breakdown = fullWord ? getWordBreakdownPieces(fullWord) : [];
+  const hasRoot = breakdown.length > 0 && breakdown[0].form !== fullWord?.word;
+  return <StageCard eyebrow="重点学习" icon={Brain}>
+    <h1 className="text-5xl font-bold">{entry.word}</h1>
+    <SpeakerButton text={entry.word} />
+    <p className="mt-2 text-sm text-[var(--muted-foreground)]">{entry.phonetic ? `${entry.phonetic} · ` : ""}{entry.partOfSpeech.join(" / ")}</p>
+    <div className="mt-6 rounded-2xl bg-[var(--primary-soft)] p-6"><p className="text-2xl font-bold text-[var(--primary)]">{entry.coreMeaningZh}</p>{entry.coreDefinitionEn && <p className="mt-3 leading-7 text-[var(--muted-foreground)]">{entry.coreDefinitionEn}</p>}</div>
+    {hasRoot && <div className="mt-5 rounded-xl border p-4 text-left"><p className="text-xs font-semibold text-[var(--muted-foreground)]">构词拆解</p><div className="mt-2 flex flex-wrap items-center gap-1.5">{breakdown.map((piece, i) => <span key={`${piece.form}-${i}`} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--background)] px-2.5 py-1 text-sm"><span className="font-mono font-bold text-[var(--primary)]">{piece.form.replace(/-$/, "")}</span><span className="text-xs text-[var(--muted-foreground)]">{piece.meaning}</span>{i < breakdown.length - 1 && <span className="text-xs text-[var(--muted-foreground)]">+</span>}</span>)}</div></div>}
+    {phrases.length > 0 && <div className="mt-5 grid gap-2 text-left">{phrases.map((phrase) => <div key={phrase.id} className="rounded-xl border px-4 py-2.5"><p className="text-sm font-semibold">{phrase.text}</p>{phrase.meaningZh && <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">{phrase.meaningZh}</p>}</div>)}</div>}
+    <p className="mt-5 rounded-xl border p-5 text-left leading-7">{entry.example}</p>
+    <Button size="lg" className="mt-7" onClick={onContinue}>继续 <ArrowRight className="size-4" /></Button>
+  </StageCard>;
 }
 
 function TodaySummary({ plan, results, focused, quizCorrect, onRestart }: { plan: TodayPlanDTO; results: Result[]; focused: ProductionVocabularyEntry[]; quizCorrect: number; onRestart: () => void }) {
@@ -183,6 +233,7 @@ function TodaySummary({ plan, results, focused, quizCorrect, onRestart }: { plan
 
 function StageCard({ eyebrow, icon: Icon, children }: { eyebrow: string; icon: typeof Gauge; children: React.ReactNode }) { return <Card className="min-h-[560px] border-indigo-200 shadow-xl shadow-indigo-950/5"><CardContent className="flex min-h-[560px] flex-col justify-center p-7 text-center sm:p-10"><div className="mb-7 flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-[var(--primary)]"><Icon className="size-4" />{eyebrow}</div>{children}</CardContent></Card>; }
 function ClassifyButton({ state, label, onClick }: { state: RecognitionState; label: string; onClick: (state: RecognitionState) => void }) { const colors = { known: "border-emerald-200 bg-emerald-50 text-emerald-800", fuzzy: "border-amber-200 bg-amber-50 text-amber-800", unknown: "border-rose-200 bg-rose-50 text-rose-800" }; return <button type="button" onClick={() => onClick(state)} className={cn("h-16 rounded-2xl border text-lg font-bold transition hover:brightness-95", colors[state])}>{label}</button>; }
+function SpeakerButton({ text }: { text: string }) { return <button type="button" onClick={() => speakWord(text)} className="mx-auto mt-3 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--primary)]" aria-label="发音"><Volume2 className="size-3.5" />发音 <kbd className="rounded border border-current/20 px-1 py-0.5 text-[10px] opacity-60">P</kbd></button>; }
 function SummaryMetric({ label, value }: { label: string; value: string | number }) { return <div className="rounded-xl bg-[var(--background)] p-4"><p className="text-2xl font-bold">{value}</p><p className="mt-1 text-xs text-[var(--muted-foreground)]">{label}</p></div>; }
 function EmptyStage({ title, detail, onContinue }: { title: string; detail: string; onContinue: () => void }) { return <StageCard eyebrow="Adaptive skip" icon={Check}><h2 className="text-3xl font-bold">{title}</h2><p className="mt-3 text-[var(--muted-foreground)]">{detail}</p><Button className="mx-auto mt-7" onClick={onContinue}>继续</Button></StageCard>; }
 function phaseLabel(phase: TodayStage): string { return { warmup: "热身复习", scan: "快速扫词", learn: "重点学习", reading: "文章阅读", "context-quiz": "语境题", summary: "总结" }[phase]; }

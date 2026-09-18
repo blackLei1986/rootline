@@ -14,6 +14,7 @@
     "audit:account-cloud": "tsx scripts/account-cloud-audit.ts",
     "audit:rss-reading": "tsx scripts/rss-reading-audit.ts",
     "feeds:audit": "tsx scripts/rss-reading-audit.ts",
+    "verify:supabase": "tsx scripts/verify-supabase-connection.ts",
     "vocab:import": "tsx scripts/vocabulary-cli.ts import",
     "vocab:generate": "tsx scripts/vocabulary-cli.ts generate",
     "vocab:validate": "tsx scripts/vocabulary-cli.ts validate",
@@ -40,6 +41,7 @@
     "react-dom": "latest",
     "server-only": "^0.0.1",
     "tailwind-merge": "latest",
+    "ts-fsrs": "^5.4.2",
     "zod": "^4.6.5"
   },
   "devDependencies": {

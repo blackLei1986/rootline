@@ -107,11 +107,11 @@ export function recordWordAnswer(
   const nextWord = {
     ...current,
     ...schedule,
-    reviewCount: current.reviewCount + 1,
+    reviewCount: schedule.reviewCount,
     correctCount: current.correctCount + (correct ? 1 : 0),
     wrongCount: current.wrongCount + (correct ? 0 : 1),
     streak: correct ? current.streak + 1 : 0,
-    lapses: current.lapses + (!correct || rating === "again" ? 1 : 0),
+    lapses: schedule.lapses,
     lastReviewedAt: now.toISOString(),
     firstLearnedAt,
     lastRating: rating
@@ -220,5 +220,63 @@ export function recordTransferResult(correct: boolean): void {
       attempts: storage.transferStats.attempts + 1,
       correct: storage.transferStats.correct + (correct ? 1 : 0)
     }
+  });
+}
+
+/** Advance the 4-stage root study flow and stamp lastReviewedAt. */
+export function recordRootStage(rootId: string, stage: number, now: Date = new Date()): void {
+  const storage = loadProgress();
+  const current = storage.roots[rootId] ?? createRootProgress(rootId);
+  saveProgress({
+    ...storage,
+    roots: {
+      ...storage.roots,
+      [rootId]: {
+        ...current,
+        status: current.status === "new" ? "learning" : current.status,
+        lastStage: Math.min(4, Math.max(1, stage)),
+        lastReviewedAt: now.toISOString()
+      }
+    }
+  });
+}
+
+/** Record one inference-challenge attempt and update the adaptive score. */
+export function recordInferenceResult(rootId: string, correct: boolean, now: Date = new Date()): void {
+  const storage = loadProgress();
+  const current = storage.roots[rootId] ?? createRootProgress(rootId);
+  const attempts = current.inferenceAttempts + 1;
+  const inferenceCorrect = current.inferenceCorrect + (correct ? 1 : 0);
+  saveProgress({
+    ...storage,
+    roots: {
+      ...storage.roots,
+      [rootId]: {
+        ...current,
+        status: current.status === "new" ? "learning" : current.status,
+        inferenceAttempts: attempts,
+        inferenceCorrect,
+        inferenceScore: Math.round((inferenceCorrect / attempts) * 100),
+        wordsSeen: current.wordsSeen + 1,
+        lastReviewedAt: now.toISOString()
+      }
+    }
+  });
+}
+
+/** Update a root's adaptive skill score (recognition / derivation). */
+export function recordRootSkill(rootId: string, skill: "recognition" | "derivation", score: number, now: Date = new Date()): void {
+  const storage = loadProgress();
+  const current = storage.roots[rootId] ?? createRootProgress(rootId);
+  const next = {
+    ...current,
+    status: current.status === "new" ? "learning" : current.status,
+    lastReviewedAt: now.toISOString()
+  };
+  if (skill === "recognition") next.recognitionScore = Math.max(0, Math.min(100, Math.round(score)));
+  else next.derivationScore = Math.max(0, Math.min(100, Math.round(score)));
+  saveProgress({
+    ...storage,
+    roots: { ...storage.roots, [rootId]: next }
   });
 }

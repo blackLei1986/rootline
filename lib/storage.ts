@@ -64,6 +64,9 @@ export function createWordProgress(wordId: string): WordProgress {
     memoryStrength: 0,
     difficulty: 50,
     intervalMinutes: 0,
+    stability: 0,
+    fsrsState: 0,
+    learningSteps: 0,
     lastReviewedAt: null,
     nextReviewAt: null,
     firstLearnedAt: null,
@@ -86,7 +89,15 @@ export function createRootProgress(rootId: string): RootProgress {
     learnedWordIds: [],
     mastery: 0,
     lastReviewedAt: null,
-    nextReviewAt: null
+    nextReviewAt: null,
+    recognitionScore: 0,
+    derivationScore: 0,
+    inferenceScore: 0,
+    wordsSeen: 0,
+    wordsMastered: 0,
+    inferenceAttempts: 0,
+    inferenceCorrect: 0,
+    lastStage: 0
   };
 }
 

@@ -1,6 +1,7 @@
 import { LEARNING_ENGINE_CONFIG } from "@/config/learning-engine";
+import { scheduleNextReview } from "@/lib/spaced-repetition";
 import { appendLearningEvent, loadProgress, saveProgress, createWordProgress } from "@/lib/storage";
-import type { RecognitionState, WordProgress } from "@/types/progress";
+import type { RecognitionState, ReviewRating, WordProgress } from "@/types/progress";
 
 const clamp = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
 
@@ -9,6 +10,17 @@ const selfAssessmentTarget: Record<RecognitionState, number> = {
   fuzzy: 35,
   unknown: 5
 };
+
+/**
+ * Map a first-sight self-assessment onto an FSRS grade so the word enters the
+ * review queue with the right interval:
+ *   known  -> easy (long interval, skip teaching)
+ *   fuzzy  -> good (short review)
+ *   unknown -> again (relearn soon, full teaching)
+ */
+export function ratingForRecognition(state: RecognitionState): ReviewRating {
+  return state === "known" ? "easy" : state === "fuzzy" ? "good" : "again";
+}
 
 export function calculateFluencyScore(progress: WordProgress): number {
   const attempts = progress.correctCount + progress.wrongCount + progress.verificationCorrectCount + progress.verificationWrongCount;
@@ -51,7 +63,12 @@ export function applyRecognitionResult(
     lastResponseTime: response,
     verificationDue: progress.verificationDue || verificationScheduled
   };
-  return { ...next, fluencyScore: calculateFluencyScore(next) };
+  // On first sight, feed the self-assessment into FSRS so the word is scheduled.
+  const scheduled: WordProgress =
+    progress.recognitionCount === 0
+      ? { ...next, ...scheduleNextReview({ progress: next, rating: ratingForRecognition(state), now }) }
+      : next;
+  return { ...scheduled, fluencyScore: calculateFluencyScore(scheduled) };
 }
 
 export function recordWordRecognition(

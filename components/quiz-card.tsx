@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Eye, XCircle } from "lucide-react";
+import { CheckCircle2, Eye, Volume2, XCircle } from "lucide-react";
 import { isQuizAnswerCorrect } from "@/lib/quiz-generator";
+import { speakWord } from "@/lib/pronounce";
 import { cn } from "@/lib/utils";
 import type { QuizQuestion } from "@/types/quiz";
 import type { ReviewRating } from "@/types/progress";
@@ -35,6 +36,10 @@ export function QuizCard({
         reveal(true);
       }
       if (!revealed && event.key === "Enter") reveal(false);
+      if ((event.key === "p" || event.key === "P") && !isTyping) {
+        event.preventDefault();
+        speakWord(question.prompt);
+      }
       if (revealed && ["1", "2", "3", "4"].includes(event.key)) {
         const rating = ({ "1": "again", "2": "hard", "3": "good", "4": "easy" } as const)[event.key as "1" | "2" | "3" | "4"];
         onRated(correct, rating);
@@ -49,6 +54,9 @@ export function QuizCard({
       <div className="text-center">
         <p className="label-caps text-xs font-bold text-[var(--primary)]">Active recall</p>
         <h2 className="mt-5 text-4xl font-bold tracking-[-0.045em] sm:text-5xl">{question.prompt}</h2>
+        <button type="button" onClick={() => speakWord(question.prompt)} className="mx-auto mt-3 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--primary)]" aria-label="发音">
+          <Volume2 className="size-3.5" />发音 <kbd className="rounded border border-current/20 px-1 py-0.5 text-[10px] opacity-60">P</kbd>
+        </button>
         <p className="mt-4 text-base text-[var(--muted-foreground)]">{question.instruction}</p>
       </div>
 

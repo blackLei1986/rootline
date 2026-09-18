@@ -1,76 +1,73 @@
 import { describe, expect, it } from "vitest";
 import { createWordProgress } from "../lib/storage";
 import { normalizeRating, scheduleNextReview } from "../lib/spaced-repetition";
+import type { ReviewRating, WordProgress } from "../types/progress";
 
 const now = new Date("2026-09-17T00:00:00.000Z");
 
-describe("scheduleNextReview", () => {
+/** Feed a schedule result back into a progress record, mimicking a real review. */
+function chain(progress: WordProgress, rating: ReviewRating): WordProgress {
+  const result = scheduleNextReview({ progress, rating, now });
+  return {
+    ...progress,
+    ...result,
+    reviewCount: result.reviewCount,
+    lapses: result.lapses,
+    lastRating: rating,
+    lastReviewedAt: now.toISOString()
+  };
+}
+
+describe("scheduleNextReview (ts-fsrs / FSRS-6, short-term learning steps)", () => {
   it.each([
-    ["again", 10],
-    ["hard", 480],
-    ["good", 1440],
-    ["easy", 4320]
-  ] as const)("schedules a first %s review", (rating, intervalMinutes) => {
+    ["again", 1],
+    ["hard", 6],
+    ["good", 10],
+    ["easy", 11520]
+  ] as const)("schedules a first %s review at the FSRS interval", (rating, intervalMinutes) => {
     const result = scheduleNextReview({ progress: createWordProgress("inspect"), rating, now });
     expect(result.intervalMinutes).toBe(intervalMinutes);
     expect(new Date(result.nextReviewAt).getTime()).toBe(now.getTime() + intervalMinutes * 60_000);
   });
 
-  it("expands the interval after repeated good ratings", () => {
-    const first = scheduleNextReview({ progress: createWordProgress("inspect"), rating: "good", now });
-    const second = scheduleNextReview({
-      progress: {
-        ...createWordProgress("inspect"),
-        reviewCount: 1,
-        intervalMinutes: first.intervalMinutes,
-        memoryStrength: first.memoryStrength,
-        difficulty: first.difficulty
-      },
-      rating: "good",
-      now
-    });
-    expect(second.intervalMinutes).toBeGreaterThan(first.intervalMinutes);
+  it("expands the interval after repeated good ratings (learn → graduate)", () => {
+    let progress = createWordProgress("inspect");
+    const intervals: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      progress = chain(progress, "good");
+      intervals.push(progress.intervalMinutes);
+    }
+    expect(intervals[0]).toBe(10);
+    expect(intervals[1]).toBeGreaterThan(intervals[0]);
+    expect(intervals[2]).toBeGreaterThan(intervals[1]);
   });
 
-  it("compresses the interval and strength after again", () => {
-    const progress = {
-      ...createWordProgress("inspect"),
-      reviewCount: 4,
-      intervalMinutes: 10_000,
-      memoryStrength: 70,
-      difficulty: 40
-    };
+  it("compresses the interval and re-enters learning after again", () => {
+    let progress = createWordProgress("inspect");
+    for (let i = 0; i < 4; i++) progress = chain(progress, "good");
+    expect(progress.intervalMinutes).toBeGreaterThan(1440);
+
     const result = scheduleNextReview({ progress, rating: "again", now });
     expect(result.intervalMinutes).toBeLessThan(progress.intervalMinutes);
-    expect(result.memoryStrength).toBe(55);
-    expect(result.difficulty).toBe(50);
     expect(result.status).toBe("learning");
+    expect(result.lapses).toBeGreaterThan(progress.lapses);
   });
 
-  it("clamps memory strength and difficulty", () => {
-    const high = scheduleNextReview({
-      progress: { ...createWordProgress("inspect"), reviewCount: 4, memoryStrength: 98, difficulty: 2, intervalMinutes: 1000 },
-      rating: "easy",
-      now
-    });
-    expect(high.memoryStrength).toBe(100);
-    expect(high.difficulty).toBe(0);
-
-    const low = scheduleNextReview({
-      progress: { ...createWordProgress("inspect"), reviewCount: 4, memoryStrength: 2, difficulty: 98, intervalMinutes: 1000 },
-      rating: "again",
-      now
-    });
-    expect(low.memoryStrength).toBe(0);
-    expect(low.difficulty).toBe(100);
-  });
-
-  it("only marks a word mastered after stable repetition", () => {
-    const result = scheduleNextReview({
-      progress: { ...createWordProgress("inspect"), reviewCount: 4, memoryStrength: 78, difficulty: 30, intervalMinutes: 5000 },
-      rating: "good",
-      now
-    });
+  it("marks a word mastered once FSRS stability passes the threshold", () => {
+    const progress: WordProgress = {
+      ...createWordProgress("inspect"),
+      reviewCount: 10,
+      lapses: 0,
+      stability: 25,
+      fsrsState: 2,
+      learningSteps: 0,
+      difficulty: 20,
+      intervalMinutes: 25 * 1440,
+      lastRating: "good",
+      lastReviewedAt: new Date("2026-09-01T00:00:00.000Z").toISOString(),
+      nextReviewAt: now.toISOString()
+    };
+    const result = scheduleNextReview({ progress, rating: "good", now });
     expect(result.status).toBe("mastered");
   });
 });
