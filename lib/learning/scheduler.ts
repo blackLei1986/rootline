@@ -328,13 +328,13 @@ export function selectDailyQueue(input: QueueInput): QueueResult {
   const weakSorted = [...weak].sort((a, b) => b.priorityScore - a.priorityScore);
   const newSorted = [...newWords].sort((a, b) => a.frequencyRank - b.frequencyRank);
 
-  let overdueQuota = Math.round(targetCount * ratio.overdue);
-  let weakQuota = Math.round(targetCount * ratio.weak);
-  let newQuota = targetCount - overdueQuota - weakQuota;
+  const overdueQuota = Math.round(targetCount * ratio.overdue);
+  const weakQuota = Math.round(targetCount * ratio.weak);
+  const newQuota = targetCount - overdueQuota - weakQuota;
 
   const take = (list: QueueItem[], count: number) => list.slice(0, Math.max(0, count));
 
-  let overduePick = take(overdueSorted, overdueQuota);
+  const overduePick = take(overdueSorted, overdueQuota);
   let weakPick = take(weakSorted, weakQuota);
   let newPick = take(newSorted, newQuota);
 
