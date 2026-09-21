@@ -23,8 +23,6 @@ export function InferenceChallenge({ rootId }: { rootId: string }) {
   );
 
   const answered = selected !== null;
-  const correct = answered && challenge !== null && selected === challenge.correctIndex;
-
   function answer(index: number) {
     if (answered || !challenge) return;
     setSelected(index);

@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   RATING,
-  NEW_INTERVAL_DAYS,
   MINUTES_PER_DAY,
   scheduleReview,
   calculatePriority,
