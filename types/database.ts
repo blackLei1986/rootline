@@ -229,6 +229,32 @@ export interface Database {
         started_at: string;
         completed_at: string | null;
       }>;
+      morphology_datasets: TableDefinition<{
+        id: string; version: string; kind: "gold" | "candidate-source"; status: "draft" | "published" | "archived";
+        source: string; provenance: Json; created_at: string; published_at: string | null;
+      }>;
+      morphology_roots: TableDefinition<{
+        id: string; dataset_id: string; root_key: string; meaning_en: Json; meaning_zh: Json;
+        educational_content: Json; provenance: Json; created_at: string;
+      }>;
+      morphology_families: TableDefinition<{
+        id: string; dataset_id: string; primary_root_id: string | null; family_key: string; display_name: string;
+        formation_explanation: string | null; source: string; provenance: Json; created_at: string;
+      }>;
+      word_morphology_records: TableDefinition<SharedRow & {
+        dataset_id: string; catalog_word_id: string; lemma: string; legacy_word_uuid: string | null;
+        family_id: string | null; primary_root_id: string | null; confidence: "verified" | "derived" | "none";
+        morphology_score: number | null; source: string; provenance: Json; formation_explanation: string | null;
+        review_status: "pending" | "approved" | "rejected"; revision: number; reviewed_at: string | null; reviewed_by: string | null;
+      }>;
+      word_morphology_segments: TableDefinition<{
+        id: string; word_morphology_record_id: string; position: number; kind: "prefix" | "root" | "suffix";
+        surface_form: string; root_id: string | null; meaning: string | null; explanation: string | null;
+      }>;
+      morphology_review_events: TableDefinition<{
+        id: string; record_id: string; action: "approve" | "edit" | "reject" | "import"; actor_id: string | null;
+        previous_snapshot: Json | null; result_snapshot: Json; reason: string | null; created_at: string;
+      }>;
     };
     Views: {
       article_catalog: {
