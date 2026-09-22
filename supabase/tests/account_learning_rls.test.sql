@@ -45,10 +45,10 @@ reset role;
 set local role anon;
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
 
-select results_eq(
+select throws_ok(
   $$ select count(*) from public.word_learning_states $$,
-  array[0::bigint],
-  'anonymous users cannot see private rows'
+  '42501', null,
+  'anonymous users cannot read private rows without a table grant'
 );
 
 select * from finish();

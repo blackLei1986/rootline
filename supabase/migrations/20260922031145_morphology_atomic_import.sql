@@ -7,6 +7,18 @@ alter table public.word_morphology_segments
   add column normalized_form text not null default '',
   add column provenance jsonb not null default '{}'::jsonb;
 
+create index idx_morphology_families_primary_root_id
+  on public.morphology_families (primary_root_id);
+
+create index idx_word_morphology_records_family_id
+  on public.word_morphology_records (family_id);
+
+create index idx_word_morphology_records_legacy_word_uuid
+  on public.word_morphology_records (legacy_word_uuid);
+
+create index idx_word_morphology_records_primary_root_id
+  on public.word_morphology_records (primary_root_id);
+
 alter table public.morphology_review_events
   alter column record_id drop not null,
   add column entity_type text not null default 'word-record',
@@ -210,9 +222,9 @@ declare
   prior_gold_dataset_exists boolean := false;
   item jsonb;
   segment_input jsonb;
-  root_id uuid;
-  family_id uuid;
-  record_id uuid;
+  target_root_id uuid;
+  target_family_id uuid;
+  target_record_id uuid;
   existing_record public.word_morphology_records%rowtype;
   previous_snapshot jsonb;
   result_snapshot jsonb;
@@ -304,13 +316,13 @@ begin
   end loop;
 
   for item in select value from jsonb_array_elements(p_plan->'families') loop
-    root_id := null;
+    target_root_id := null;
     if item->>'primaryRootKey' is not null then
-      select id into root_id
+      select id into target_root_id
       from public.morphology_roots
       where morphology_roots.dataset_id = target_dataset_id
         and root_key = item->>'primaryRootKey';
-      if root_id is null then
+      if target_root_id is null then
         raise exception using errcode = '22023', message = format('Unknown family root %s', item->>'primaryRootKey');
       end if;
     end if;
@@ -320,7 +332,7 @@ begin
       formation_explanation, source, provenance
     ) values (
       target_dataset_id,
-      root_id,
+      target_root_id,
       item->>'familyKey',
       item->>'displayName',
       item->>'formationExplanation',
@@ -366,24 +378,24 @@ begin
       continue;
     end if;
 
-    root_id := null;
+    target_root_id := null;
     if item->>'primaryRootKey' is not null then
-      select id into root_id
+      select id into target_root_id
       from public.morphology_roots
       where morphology_roots.dataset_id = target_dataset_id
         and root_key = item->>'primaryRootKey';
-      if root_id is null then
+      if target_root_id is null then
         raise exception using errcode = '22023', message = format('Unknown primary root %s', item->>'primaryRootKey');
       end if;
     end if;
 
-    family_id := null;
+    target_family_id := null;
     if item->>'familyKey' is not null then
-      select id into family_id
+      select id into target_family_id
       from public.morphology_families
       where morphology_families.dataset_id = target_dataset_id
         and family_key = item->>'familyKey';
-      if family_id is null then
+      if target_family_id is null then
         raise exception using errcode = '22023', message = format('Unknown morphology family %s', item->>'familyKey');
       end if;
     end if;
@@ -398,8 +410,8 @@ begin
        and existing_record.provenance->>'contentHash' = item->>'contentHash'
        and (select count(*) from public.word_morphology_segments segment where segment.word_morphology_record_id = existing_record.id)
            = jsonb_array_length(item->'segments')
-       and existing_record.family_id is not distinct from family_id
-       and existing_record.primary_root_id is not distinct from root_id then
+       and existing_record.family_id is not distinct from target_family_id
+       and existing_record.primary_root_id is not distinct from target_root_id then
       records_unchanged := records_unchanged + 1;
       continue;
     end if;
@@ -410,8 +422,8 @@ begin
       set
         word = item->>'word',
         lemma = item->>'lemma',
-        family_id = family_id,
-        primary_root_id = root_id,
+        family_id = target_family_id,
+        primary_root_id = target_root_id,
         confidence = item->>'confidence',
         morphology_score = (item->>'morphologyScore')::numeric,
         source = item->>'source',
@@ -423,7 +435,7 @@ begin
         review_status = item->>'reviewStatus',
         revision = existing_record.revision + 1
       where id = existing_record.id
-      returning id into record_id;
+      returning id into target_record_id;
       records_updated := records_updated + 1;
       action_name := 're-import';
     else
@@ -437,8 +449,8 @@ begin
         item->>'catalogWordId',
         item->>'word',
         item->>'lemma',
-        family_id,
-        root_id,
+        target_family_id,
+        target_root_id,
         item->>'confidence',
         (item->>'morphologyScore')::numeric,
         item->>'source',
@@ -448,7 +460,7 @@ begin
         item->>'literalMeaning',
         item->>'formationExplanation',
         item->>'reviewStatus'
-      ) returning id into record_id;
+      ) returning id into target_record_id;
       records_inserted := records_inserted + 1;
       action_name := case
         when item->>'source' = 'gold-dataset-exact-lemma' then 'derived-create'
@@ -458,16 +470,16 @@ begin
     end if;
 
     delete from public.word_morphology_segments
-    where word_morphology_record_id = record_id;
+    where word_morphology_record_id = target_record_id;
 
     for segment_input in select value from jsonb_array_elements(item->'segments') loop
-      root_id := null;
+      target_root_id := null;
       if segment_input->>'rootKey' is not null then
-        select id into root_id
+        select id into target_root_id
         from public.morphology_roots
         where morphology_roots.dataset_id = target_dataset_id
           and root_key = segment_input->>'rootKey';
-        if root_id is null then
+        if target_root_id is null then
           raise exception using errcode = '22023', message = format('Unknown segment root %s', segment_input->>'rootKey');
         end if;
       end if;
@@ -476,12 +488,12 @@ begin
         word_morphology_record_id, position, kind, surface_form, normalized_form,
         root_id, meaning, explanation, provenance
       ) values (
-        record_id,
+        target_record_id,
         (segment_input->>'position')::integer,
         segment_input->>'kind',
         segment_input->>'surfaceForm',
         segment_input->>'normalizedForm',
-        root_id,
+        target_root_id,
         segment_input->>'meaning',
         segment_input->>'explanation',
         coalesce(segment_input->'provenance', '{}'::jsonb)
@@ -496,16 +508,16 @@ begin
       ), '[]'::jsonb)
     ) into result_snapshot
     from public.word_morphology_records record
-    where record.id = record_id;
+    where record.id = target_record_id;
 
     insert into public.morphology_review_events (
       record_id, entity_type, entity_id, word_id, action, actor,
       previous_snapshot, result_snapshot, dataset_version, source,
       metadata, idempotency_key
     ) values (
-      record_id,
+      target_record_id,
       'word-record',
-      record_id::text,
+      target_record_id::text,
       item->>'catalogWordId',
       action_name,
       p_actor,

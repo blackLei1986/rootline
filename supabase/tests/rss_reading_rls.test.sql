@@ -60,10 +60,10 @@ reset role;
 set local role anon;
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
 
-select results_eq(
+select throws_ok(
   $$ select count(*) from public.user_feed_subscriptions $$,
-  array[0::bigint],
-  'anonymous users cannot read private subscriptions'
+  '42501', null,
+  'anonymous users have no table grant for private subscriptions'
 );
 
 reset role;

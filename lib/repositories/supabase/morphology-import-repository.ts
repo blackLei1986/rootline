@@ -44,7 +44,7 @@ const resultSchema = z.object({
 export class SupabaseMorphologyImportRepository implements MorphologyImportPersistence {
   constructor(private readonly client: DatabaseClient) {}
 
-  async loadState(_datasetVersion: string): Promise<PersistedMorphologyState> {
+  async loadState(): Promise<PersistedMorphologyState> {
     const [datasetsResult, rootsResult, familiesResult, recordsResult] = await Promise.all([
       this.client.from("morphology_datasets").select("id,version,provenance"),
       this.client.from("morphology_roots").select("id,dataset_id,root_key,provenance"),

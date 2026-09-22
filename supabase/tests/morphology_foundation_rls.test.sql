@@ -1,9 +1,34 @@
 begin;
 
-select plan(10);
+select plan(14);
 
 select has_table('public', 'morphology_datasets', 'versioned morphology datasets exist');
 select has_table('public', 'word_morphology_records', 'word morphology records exist');
+
+select has_index(
+  'public',
+  'morphology_families',
+  'idx_morphology_families_primary_root_id',
+  'morphology family root foreign keys are indexed'
+);
+select has_index(
+  'public',
+  'word_morphology_records',
+  'idx_word_morphology_records_family_id',
+  'word morphology family foreign keys are indexed'
+);
+select has_index(
+  'public',
+  'word_morphology_records',
+  'idx_word_morphology_records_legacy_word_uuid',
+  'legacy word foreign keys are indexed'
+);
+select has_index(
+  'public',
+  'word_morphology_records',
+  'idx_word_morphology_records_primary_root_id',
+  'word morphology root foreign keys are indexed'
+);
 
 insert into public.morphology_datasets (version, kind, status, source, provenance)
 values ('test-gold-v1', 'gold', 'published', 'test', '{}'::jsonb);
