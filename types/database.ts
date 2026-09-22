@@ -326,6 +326,17 @@ export interface Database {
         };
         Returns: boolean;
       };
+      apply_morphology_review: {
+        Args: {
+          p_record_id: string;
+          p_expected_revision: number;
+          p_action: string;
+          p_actor_id: string;
+          p_reason: string | null;
+          p_segments: Json | null;
+        };
+        Returns: Json;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

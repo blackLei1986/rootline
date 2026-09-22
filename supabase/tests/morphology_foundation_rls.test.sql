@@ -1,6 +1,6 @@
 begin;
 
-select plan(8);
+select plan(10);
 
 select has_table('public', 'morphology_datasets', 'versioned morphology datasets exist');
 select has_table('public', 'word_morphology_records', 'word morphology records exist');
@@ -59,6 +59,21 @@ select throws_ok(
        'bad-confidence', 'inspect', 'high', 100, 'test', '{}'::jsonb, 'pending'
      ) $$,
   '23514', null, 'legacy confidence labels are rejected'
+);
+
+select has_function(
+  'public',
+  'apply_morphology_review',
+  array['uuid', 'integer', 'text', 'uuid', 'text', 'jsonb'],
+  'review mutations use one database-side transaction function'
+);
+select function_privs_are(
+  'public',
+  'apply_morphology_review',
+  array['uuid', 'integer', 'text', 'uuid', 'text', 'jsonb'],
+  'service_role',
+  array['EXECUTE'],
+  'only the server service role can execute review mutations'
 );
 
 select * from finish();
