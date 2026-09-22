@@ -22,6 +22,7 @@
     "vocab:report": "tsx scripts/vocabulary-cli.ts report",
     "vocab:production-report": "node --import tsx scripts/vocabulary-production-report.ts",
     "morphology:coverage": "node --import tsx scripts/morphology-coverage-report.ts",
+    "morphology:import": "node --import tsx scripts/morphology-cli.ts",
     "acceptance:final": "tsx scripts/final-product-acceptance.ts",
     "vocab:build-production": "node --max-old-space-size=2048 --import tsx scripts/build-production-vocabulary.ts",
     "vocab:build-reading-index": "node --import tsx scripts/build-reading-index.ts",

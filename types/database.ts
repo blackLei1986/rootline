@@ -242,18 +242,24 @@ export interface Database {
         formation_explanation: string | null; source: string; provenance: Json; created_at: string;
       }>;
       word_morphology_records: TableDefinition<SharedRow & {
-        dataset_id: string; catalog_word_id: string; lemma: string; legacy_word_uuid: string | null;
+        dataset_id: string; catalog_word_id: string; word: string; lemma: string; legacy_word_uuid: string | null;
         family_id: string | null; primary_root_id: string | null; confidence: "verified" | "derived" | "none";
         morphology_score: number | null; source: string; provenance: Json; formation_explanation: string | null;
+        morphology_expression: string; literal_meaning: string;
         review_status: "pending" | "approved" | "rejected"; revision: number; reviewed_at: string | null; reviewed_by: string | null;
       }>;
       word_morphology_segments: TableDefinition<{
         id: string; word_morphology_record_id: string; position: number; kind: "prefix" | "root" | "suffix";
-        surface_form: string; root_id: string | null; meaning: string | null; explanation: string | null;
+        surface_form: string; normalized_form: string; root_id: string | null; meaning: string | null;
+        explanation: string | null; provenance: Json;
       }>;
       morphology_review_events: TableDefinition<{
-        id: string; record_id: string; action: "approve" | "edit" | "reject" | "import"; actor_id: string | null;
-        previous_snapshot: Json | null; result_snapshot: Json; reason: string | null; created_at: string;
+        id: string; record_id: string | null; entity_type: "dataset" | "word-record"; entity_id: string;
+        word_id: string | null;
+        action: "gold-import" | "derived-create" | "approve" | "edit" | "reject" | "re-import" | "version-change" | "reopen" | "import";
+        actor_id: string | null; actor: string | null; previous_snapshot: Json | null; result_snapshot: Json;
+        reason: string | null; dataset_version: string; source: string; metadata: Json;
+        idempotency_key: string | null; created_at: string;
       }>;
     };
     Views: {
@@ -334,6 +340,13 @@ export interface Database {
           p_actor_id: string;
           p_reason: string | null;
           p_segments: Json | null;
+        };
+        Returns: Json;
+      };
+      apply_morphology_import: {
+        Args: {
+          p_plan: Json;
+          p_actor: string;
         };
         Returns: Json;
       };
