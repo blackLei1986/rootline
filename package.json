@@ -25,6 +25,7 @@
     "morphology:import": "node --import tsx scripts/morphology-cli.ts",
     "morphology:root-readiness": "node --import tsx scripts/root-expansion-readiness-report.ts",
     "morphology:root-expansion-report": "node --import tsx scripts/root-expansion-report.ts",
+    "morphology:daily30-sim": "node --import tsx scripts/morphology-daily30-sim.ts",
     "acceptance:final": "tsx scripts/final-product-acceptance.ts",
     "vocab:build-production": "node --max-old-space-size=2048 --import tsx scripts/build-production-vocabulary.ts",
     "vocab:build-reading-index": "node --import tsx scripts/build-reading-index.ts",

@@ -1,0 +1,97 @@
+import type { CoverageTag, FrequencyBand } from "@/types/vocabulary";
+
+export interface Daily30Candidate {
+  catalogWordId: string;
+  rootKey: string;
+  familyKey: string | null;
+  frequencyRank: number;
+  frequencyBand: FrequencyBand;
+  coverageTags: CoverageTag[];
+  learningValueScore: number;
+  confidence: "verified" | "derived" | "none";
+  reviewStatus: "pending" | "approved" | "rejected";
+  rootPedagogicalConfidence: number | null;
+}
+
+export interface Daily30SimulationReport {
+  days: Array<{
+    day: number;
+    rootClusters: string[];
+    selectedWords: Daily30Candidate[];
+    filledSlots: number;
+    shortfall: number;
+    noneConfidenceFallbackCount: 0;
+    qualityWarnings: Array<"insufficient-root-capacity" | "family-concentration" | "no-eligible-candidates">;
+  }>;
+  summary: { eligibleCandidates: number; filledSlots: number; targetSlots: number; distinctRoots: number };
+  readiness: "READY_FOR_PHASE_1B" | "NOT_READY_FOR_PHASE_1B";
+  limitingMetrics: string[];
+}
+
+export function simulateDaily30({ days = 14, candidates }: { days?: number; candidates: readonly Daily30Candidate[] }): Daily30SimulationReport {
+  if (!Number.isInteger(days) || days < 1) throw new Error("days must be a positive integer");
+  const eligible = candidates.filter((candidate) => candidate.confidence !== "none" && candidate.reviewStatus !== "rejected");
+  const selectedIds = new Set<string>();
+  const daily = Array.from({ length: days }, (_, index) => buildDay(index + 1, eligible, selectedIds));
+  const filledSlots = daily.reduce((sum, day) => sum + day.filledSlots, 0);
+  const distinctRoots = new Set(eligible.map((candidate) => candidate.rootKey)).size;
+  const limitingMetrics: string[] = [];
+  if (eligible.length < 420) limitingMetrics.push(`eligible-usable-words:${eligible.length}<420`);
+  if (filledSlots < days * 30) limitingMetrics.push(`filled-slots:${filledSlots}<${days * 30}`);
+  if (daily.some((day) => day.rootClusters.length < 2 || day.rootClusters.length > 4)) limitingMetrics.push("root-clusters:not-2-to-4");
+  if (daily.some((day) => day.qualityWarnings.length > 0)) limitingMetrics.push("quality-warnings:present");
+  if (distinctRoots < 2) limitingMetrics.push(`distinct-roots:${distinctRoots}<2`);
+  return {
+    days: daily,
+    summary: { eligibleCandidates: eligible.length, filledSlots, targetSlots: days * 30, distinctRoots },
+    readiness: limitingMetrics.length === 0 ? "READY_FOR_PHASE_1B" : "NOT_READY_FOR_PHASE_1B",
+    limitingMetrics
+  };
+}
+
+function buildDay(day: number, candidates: readonly Daily30Candidate[], selectedIds: Set<string>): Daily30SimulationReport["days"][number] {
+  const remaining = candidates.filter((candidate) => !selectedIds.has(candidate.catalogWordId));
+  const byRoot = new Map<string, Daily30Candidate[]>();
+  for (const candidate of remaining) {
+    const group = byRoot.get(candidate.rootKey) ?? [];
+    group.push(candidate);
+    byRoot.set(candidate.rootKey, group);
+  }
+  const warnings: Daily30SimulationReport["days"][number]["qualityWarnings"] = [];
+  const rootGroups = [...byRoot.entries()].map(([rootKey, words]) => ({
+    rootKey,
+    words: words.sort(candidateOrder),
+    familyCount: new Set(words.map((word) => word.familyKey ?? `ungrouped:${word.catalogWordId}`)).size,
+    pedagogicalConfidence: Math.max(...words.map((word) => word.rootPedagogicalConfidence ?? 0))
+  })).filter((group) => group.words.length >= 5 && group.words.length <= 15);
+  if (rootGroups.some((group) => group.familyCount < 2)) warnings.push("family-concentration");
+  const viable = rootGroups.filter((group) => group.familyCount >= 2).sort((left, right) => (
+    right.familyCount - left.familyCount || right.words.length - left.words.length || right.pedagogicalConfidence - left.pedagogicalConfidence || left.rootKey.localeCompare(right.rootKey, "en")
+  ));
+  const clusters = viable.slice(0, 4);
+  if (clusters.length < 2) {
+    if (!warnings.includes("family-concentration") && remaining.length > 0) warnings.push("insufficient-root-capacity");
+    if (remaining.length === 0) warnings.push("no-eligible-candidates");
+    return { day, rootClusters: [], selectedWords: [], filledSlots: 0, shortfall: 30, noneConfidenceFallbackCount: 0, qualityWarnings: warnings };
+  }
+  const selected: Daily30Candidate[] = [];
+  const perFamily = new Map<string, number>();
+  for (const group of clusters) {
+    for (const word of group.words) {
+      if (selected.length >= 30) break;
+      const key = `${group.rootKey}:${word.familyKey ?? word.catalogWordId}`;
+      if ((perFamily.get(key) ?? 0) >= 2) continue;
+      selected.push(word);
+      selectedIds.add(word.catalogWordId);
+      perFamily.set(key, (perFamily.get(key) ?? 0) + 1);
+    }
+  }
+  if (selected.length < 30) warnings.push("family-concentration");
+  return { day, rootClusters: clusters.map((group) => group.rootKey), selectedWords: selected, filledSlots: selected.length, shortfall: 30 - selected.length, noneConfidenceFallbackCount: 0, qualityWarnings: warnings };
+}
+
+function candidateOrder(left: Daily30Candidate, right: Daily30Candidate): number {
+  return left.frequencyRank - right.frequencyRank
+    || right.learningValueScore - left.learningValueScore
+    || left.catalogWordId.localeCompare(right.catalogWordId, "en");
+}
