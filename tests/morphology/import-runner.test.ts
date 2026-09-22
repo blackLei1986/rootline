@@ -16,7 +16,7 @@ const vocabulary = [{
 
 function persistence(): MorphologyImportPersistence {
   return {
-    loadState: vi.fn().mockResolvedValue({ datasets: [], roots: [], families: [], records: [] }),
+    loadState: vi.fn().mockResolvedValue({ datasets: [], roots: [], variants: [], families: [], records: [] }),
     apply: vi.fn().mockResolvedValue({
       datasetVersion: "gold-v1",
       recordsInserted: 151,
