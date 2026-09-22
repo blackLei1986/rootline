@@ -1,6 +1,6 @@
 begin;
 
-select plan(30);
+select plan(31);
 
 select has_function(
   'public',
@@ -208,7 +208,7 @@ select lives_ok(
   $$ select public.apply_morphology_import(
     '{
       "dataset": {"version": "test-variants-v2", "source": "test-gold", "provenance": {"contentHash": "variant-v2-hash"}},
-      "roots": [{"rootKey": "cap", "root": "cap", "meaningEn": ["take"], "meaningZh": ["拿"], "educationalContent": {"description": "take", "learningRationale": "test"}, "provenance": [{"sourceTitle": "fixture", "sourceUrl": "https://example.test/cap", "accessedAt": "2026-09-22", "evidenceNote": "fixture"}], "contentHash": "cap-root-hash"}],
+      "roots": [{"rootKey": "cap", "root": "cap", "meaningEn": ["take"], "meaningZh": ["拿"], "educationalContent": {"description": "take", "learningRationale": "test"}, "etymologyConfidence": "high", "pedagogicalConfidence": 93, "riskNotes": "fixture risk", "provenance": [{"sourceTitle": "fixture", "sourceUrl": "https://example.test/cap", "accessedAt": "2026-09-22", "evidenceNote": "fixture"}], "contentHash": "cap-root-hash"}],
       "variants": [{"rootKey": "cap", "form": "cept", "relation": "historical", "explanation": "explicit cap form", "provenance": {"sourceTitle": "fixture", "sourceUrl": "https://example.test/cap", "accessedAt": "2026-09-22", "evidenceNote": "fixture"}, "contentHash": "cap-cept-hash"}],
       "families": [], "records": []
     }'::jsonb,
@@ -225,6 +225,11 @@ select results_eq(
   $$ select root.provenance->'rootProvenance'->0->>'sourceTitle' from public.morphology_roots root join public.morphology_datasets dataset on dataset.id = root.dataset_id where dataset.version = 'test-variants-v2' and root.root_key = 'cap' $$,
   array['fixture'::text],
   'root-specific source provenance is retained with dataset provenance'
+);
+select results_eq(
+  $$ select root.provenance->'rootMetadata'->>'riskNotes' from public.morphology_roots root join public.morphology_datasets dataset on dataset.id = root.dataset_id where dataset.version = 'test-variants-v2' and root.root_key = 'cap' $$,
+  array['fixture risk'::text],
+  'root confidence and risk metadata are retained for persisted reports'
 );
 select results_eq(
   $$ select count(*) from public.morphology_review_events where dataset_version = 'test-variants-v2' and entity_type = 'root-variant' $$,

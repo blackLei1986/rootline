@@ -3,7 +3,14 @@ import { throwRepositoryError, type DatabaseClient } from "@/lib/repositories/su
 
 type RawCoverageData = {
   datasetVersion: string;
-  roots: Array<{ id: string; root_key: string }>;
+  roots: Array<{ id: string; root_key: string; educational_content: unknown; provenance: unknown }>;
+  variants: Array<{
+    canonical_root_id: string;
+    variant_form: string;
+    relation: "historical" | "pedagogical";
+    explanation: string;
+    provenance: unknown;
+  }>;
   families: Array<{ id: string; family_key: string }>;
   records: Array<{
     catalog_word_id: string;
@@ -18,7 +25,19 @@ type RawCoverageData = {
 
 export type PersistedCoverageData = {
   datasetVersion: string;
-  roots: Array<{ id: string; rootKey: string }>;
+  roots: Array<{
+    id: string;
+    rootKey: string;
+    educationalContent: Record<string, unknown>;
+    provenance: Record<string, unknown>;
+  }>;
+  variants: Array<{
+    rootKey: string;
+    form: string;
+    relation: "historical" | "pedagogical";
+    explanation: string;
+    provenance: Record<string, unknown>;
+  }>;
   records: PersistedCoverageRecord[];
 };
 
@@ -37,8 +56,9 @@ export class SupabaseMorphologyCoverageRepository {
     }
 
     const datasetId = datasetResult.data.id;
-    const [rootsResult, familiesResult, recordsResult] = await Promise.all([
-      this.client.from("morphology_roots").select("id,root_key").eq("dataset_id", datasetId),
+    const [rootsResult, variantsResult, familiesResult, recordsResult] = await Promise.all([
+      this.client.from("morphology_roots").select("id,root_key,educational_content,provenance").eq("dataset_id", datasetId),
+      this.client.from("morphology_root_variants").select("canonical_root_id,variant_form,relation,explanation,provenance").eq("dataset_id", datasetId),
       this.client.from("morphology_families").select("id,family_key").eq("dataset_id", datasetId),
       this.client
         .from("word_morphology_records")
@@ -46,12 +66,14 @@ export class SupabaseMorphologyCoverageRepository {
         .eq("dataset_id", datasetId)
     ]);
     throwRepositoryError(rootsResult.error, "load persisted morphology roots");
+    throwRepositoryError(variantsResult.error, "load persisted morphology root variants");
     throwRepositoryError(familiesResult.error, "load persisted morphology families");
     throwRepositoryError(recordsResult.error, "load persisted morphology records");
 
     return mapPersistedCoverageData({
       datasetVersion,
       roots: (rootsResult.data ?? []) as RawCoverageData["roots"],
+      variants: (variantsResult.data ?? []) as RawCoverageData["variants"],
       families: (familiesResult.data ?? []) as RawCoverageData["families"],
       records: (recordsResult.data ?? []) as unknown as RawCoverageData["records"]
     });
@@ -63,15 +85,29 @@ export function mapPersistedCoverageData(raw: RawCoverageData): PersistedCoverag
   const familyKeyById = new Map(raw.families.map((family) => [family.id, family.family_key]));
   return {
     datasetVersion: raw.datasetVersion,
-    roots: raw.roots.map((root) => ({ id: root.id, rootKey: root.root_key })),
+    roots: raw.roots.map((root) => ({
+      id: root.id,
+      rootKey: root.root_key,
+      educationalContent: asObject(root.educational_content),
+      provenance: asObject(root.provenance)
+    })),
+    variants: raw.variants.flatMap((variant) => {
+      const rootKey = rootKeyById.get(variant.canonical_root_id);
+      if (!rootKey) return [];
+      return [{
+        rootKey,
+        form: variant.variant_form,
+        relation: variant.relation,
+        explanation: variant.explanation,
+        provenance: asObject(variant.provenance)
+      }];
+    }),
     records: raw.records.map((record) => ({
       catalogWordId: record.catalog_word_id,
       confidence: record.confidence,
       reviewStatus: record.review_status,
       source: record.source,
-      provenance: record.provenance && typeof record.provenance === "object" && !Array.isArray(record.provenance)
-        ? record.provenance as Record<string, unknown>
-        : {},
+      provenance: asObject(record.provenance),
       familyKey: record.family_id ? familyKeyById.get(record.family_id) ?? null : null,
       rootKeys: [...new Set(
         (record.word_morphology_segments ?? []).flatMap((segment) => {
@@ -82,4 +118,10 @@ export function mapPersistedCoverageData(raw: RawCoverageData): PersistedCoverag
       )]
     }))
   };
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }

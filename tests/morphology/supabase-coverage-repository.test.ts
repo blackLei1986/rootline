@@ -6,7 +6,8 @@ describe("mapPersistedCoverageData", () => {
   it("reconstructs morphology roots and families from persisted foreign keys", () => {
     const data = mapPersistedCoverageData({
       datasetVersion: "gold-v1",
-      roots: [{ id: "root-spect", root_key: "spect" }],
+      roots: [{ id: "root-spect", root_key: "spect", educational_content: { description: "look" }, provenance: { rootMetadata: { pedagogicalConfidence: 90 } } }],
+      variants: [{ canonical_root_id: "root-spect", variant_form: "specto", relation: "historical", explanation: "fixture", provenance: { evidence: "fixture" } }],
       families: [{ id: "family-inspect", family_key: "gold:inspect" }],
       records: [{
         catalog_word_id: "inspect",
@@ -25,7 +26,8 @@ describe("mapPersistedCoverageData", () => {
 
     expect(data).toEqual({
       datasetVersion: "gold-v1",
-      roots: [{ id: "root-spect", rootKey: "spect" }],
+      roots: [{ id: "root-spect", rootKey: "spect", educationalContent: { description: "look" }, provenance: { rootMetadata: { pedagogicalConfidence: 90 } } }],
+      variants: [{ rootKey: "spect", form: "specto", relation: "historical", explanation: "fixture", provenance: { evidence: "fixture" } }],
       records: [{
         catalogWordId: "inspect",
         confidence: "derived",
