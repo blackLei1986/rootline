@@ -3,7 +3,7 @@ import {
   type MorphologyImportPlan,
   type PersistedMorphologyState
 } from "@/lib/morphology/import-service";
-import type { GoldDatasetV1 } from "@/lib/morphology/types";
+import type { GoldDataset } from "@/lib/morphology/types";
 import type { ProductionVocabularyEntry } from "@/types/vocabulary";
 
 export interface MorphologyImportResult {
@@ -31,7 +31,7 @@ export class MorphologyImportService {
     dataset,
     vocabulary
   }: {
-    dataset: GoldDatasetV1;
+    dataset: GoldDataset;
     vocabulary: readonly ProductionVocabularyEntry[];
   }): Promise<MorphologyImportPlan> {
     const persisted = await this.persistence.loadState(dataset.version);

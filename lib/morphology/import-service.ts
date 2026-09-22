@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type {
-  GoldDatasetV1,
+  GoldDataset,
   GoldRoot,
   GoldWord,
   MorphologyConfidenceV2,
@@ -70,7 +70,7 @@ export interface MorphologyImportRecord {
 
 export interface MorphologyImportPlan {
   payload: {
-    dataset: GoldDatasetV1;
+    dataset: GoldDataset;
     roots: Array<GoldRoot & { contentHash: string }>;
     families: Array<{
       familyKey: string;
@@ -106,7 +106,7 @@ export function buildMorphologyImportPlan({
   vocabulary,
   persisted
 }: {
-  dataset: GoldDatasetV1;
+  dataset: GoldDataset;
   vocabulary: readonly VocabularyWord[];
   persisted: PersistedMorphologyState;
 }): MorphologyImportPlan {
@@ -225,7 +225,7 @@ export function buildMorphologyImportPlan({
 }
 
 function goldRecord(
-  dataset: GoldDatasetV1,
+  dataset: GoldDataset,
   word: GoldWord,
   rootMeaning: ReadonlyMap<string, string>
 ): MorphologyImportRecord {
@@ -256,7 +256,7 @@ function goldRecord(
 }
 
 function derivedRecord(
-  dataset: GoldDatasetV1,
+  dataset: GoldDataset,
   word: GoldWord,
   vocabularyWord: VocabularyWord,
   rootMeaning: ReadonlyMap<string, string>
@@ -288,7 +288,7 @@ function derivedRecord(
 }
 
 function segmentsFor(
-  dataset: GoldDatasetV1,
+  dataset: GoldDataset,
   word: GoldWord,
   rootMeaning: ReadonlyMap<string, string>,
   source: MorphologyImportRecord["source"]
@@ -387,7 +387,7 @@ function relationCount(record: MorphologyImportRecord): number {
 }
 
 function familyKey(word: GoldWord): string {
-  return `gold:${word.wordId}`;
+  return word.lexicalFamily?.key ?? `gold:${word.wordId}`;
 }
 
 function normalize(value: string): string {

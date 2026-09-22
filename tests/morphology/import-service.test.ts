@@ -3,7 +3,10 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { createGoldDatasetV1 } from "@/lib/morphology/gold-dataset";
+import {
+  createGoldDatasetV1,
+  createGoldDatasetV2
+} from "@/lib/morphology/gold-dataset";
 import {
   buildMorphologyImportPlan,
   type PersistedMorphologyState
@@ -195,5 +198,37 @@ describe("buildMorphologyImportPlan", () => {
     expect(plan.errors).toEqual([
       "Dataset version gold-v1 already exists with a different content hash; create a new dataset version."
     ]);
+  });
+
+  it("projects only exact v2 lemmas and keeps verified production records stronger than derived", () => {
+    const plan = buildMorphologyImportPlan({
+      dataset: createGoldDatasetV2(),
+      vocabulary: [
+        { id: "action", word: "action", lemma: "action", wordFamilyId: "legacy-action" },
+        { id: "noise", word: "enactmentish", lemma: "enactmentish", wordFamilyId: "noise" },
+        { id: "active", word: "active", lemma: "active", wordFamilyId: "legacy-active" }
+      ] as ProductionVocabularyEntry[],
+      persisted: {
+        ...emptyState,
+        records: [{
+          id: "00000000-0000-4000-8000-000000000012",
+          datasetVersion: "gold-v1",
+          catalogWordId: "active",
+          source: "manual-review",
+          confidence: "verified",
+          reviewStatus: "approved",
+          contentHash: "reviewed",
+          segmentCount: 2,
+          rootRelationCount: 1,
+          hasFamilyRelation: true
+        }]
+      }
+    });
+
+    expect(plan.errors).toEqual([]);
+    expect(plan.payload.records.find((record) => record.catalogWordId === "action" && record.source === "gold-dataset-exact-lemma"))
+      .toMatchObject({ confidence: "derived", reviewStatus: "pending", familyKey: "act:action" });
+    expect(plan.payload.records.some((record) => record.catalogWordId === "noise")).toBe(false);
+    expect(plan.payload.records.some((record) => record.catalogWordId === "active" && record.source === "gold-dataset-exact-lemma")).toBe(false);
   });
 });

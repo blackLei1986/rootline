@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
-import { createGoldDatasetV1 } from "@/lib/morphology/gold-dataset";
+import { createGoldDataset } from "@/lib/morphology/gold-dataset";
 import { parseMorphologyImportArgs } from "@/lib/morphology/import-cli";
 import { MorphologyImportService } from "@/lib/morphology/import-runner";
 import { SupabaseMorphologyImportRepository } from "@/lib/repositories/supabase/morphology-import-repository";
@@ -52,7 +52,7 @@ async function main(): Promise<void> {
   const vocabulary = JSON.parse(
     await readFile(resolve(process.cwd(), "data/vocabulary/production-catalog.json"), "utf8")
   ) as ProductionVocabularyEntry[];
-  const dataset = createGoldDatasetV1();
+  const dataset = createGoldDataset(args.datasetVersion);
   if (dataset.version !== args.datasetVersion) {
     throw new Error(`Dataset source mismatch: expected ${args.datasetVersion}, received ${dataset.version}.`);
   }

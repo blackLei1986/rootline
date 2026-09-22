@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createGoldDatasetV1 } from "@/lib/morphology/gold-dataset";
+import {
+  createGoldDatasetV1,
+  createGoldDatasetV2
+} from "@/lib/morphology/gold-dataset";
 
 describe("createGoldDatasetV1", () => {
   it("projects the curated roots and words into a stable versioned Gold Dataset", () => {
@@ -26,5 +29,23 @@ describe("createGoldDatasetV1", () => {
       prefix: { form: "in-", meaning: "into" },
       formationExplanation: "look into"
     });
+  });
+
+  it("keeps v1 immutable while v2 adds evidence-backed roots, variants, and lexical families", () => {
+    const v1 = createGoldDatasetV1();
+    const v2 = createGoldDatasetV2();
+
+    expect(v1.version).toBe("gold-v1");
+    expect(v1.roots).toHaveLength(20);
+    expect(v1.words).toHaveLength(150);
+    expect(v2.version).toBe("gold-v2");
+    expect(v2.roots.length).toBeGreaterThanOrEqual(45);
+    expect(v2.roots.length).toBeLessThanOrEqual(50);
+    expect(v2.words.length).toBeGreaterThanOrEqual(400);
+    expect(v2.words.length).toBeLessThanOrEqual(600);
+    expect(v2.roots.find((root) => root.rootKey === "cap")?.variants)
+      .toContainEqual(expect.objectContaining({ form: "cept", relation: "historical" }));
+    expect(v2.words.find((word) => word.wordId === "v2:action")?.lexicalFamily?.key)
+      .toBe("act:action");
   });
 });

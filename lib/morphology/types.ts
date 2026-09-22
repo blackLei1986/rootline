@@ -1,5 +1,28 @@
 export type MorphologyConfidenceV2 = "verified" | "derived" | "none";
 export type MorphologyReviewStatus = "pending" | "approved" | "rejected";
+export type GoldDatasetVersion = "gold-v1" | "gold-v2";
+export type EtymologyConfidence = "high" | "medium" | "cautious";
+export type RootVariantRelation = "historical" | "pedagogical";
+
+export interface RootProvenance {
+  sourceTitle: string;
+  sourceUrl: string;
+  accessedAt: "2026-09-22";
+  evidenceNote: string;
+}
+
+export interface GoldRootVariant {
+  form: string;
+  relation: RootVariantRelation;
+  explanation: string;
+  provenance: RootProvenance;
+}
+
+export interface GoldLexicalFamily {
+  key: string;
+  displayName: string;
+  formationExplanation: string;
+}
 
 export interface MorphologySegmentInput {
   position: number;
@@ -36,6 +59,11 @@ export interface GoldRoot {
     learningRationale: string;
     origin?: string;
   };
+  variants?: GoldRootVariant[];
+  etymologyConfidence?: EtymologyConfidence;
+  pedagogicalConfidence?: number;
+  riskNotes?: string;
+  provenance?: RootProvenance[];
 }
 
 export interface GoldWord {
@@ -48,19 +76,24 @@ export interface GoldWord {
   morphology: string;
   formationExplanation: string;
   teachingFamily: string[];
+  lexicalFamily?: GoldLexicalFamily;
+  provenance?: RootProvenance[];
 }
 
-export interface GoldDatasetV1 {
-  version: "gold-v1";
+export interface GoldDataset {
+  version: GoldDatasetVersion;
   source: "rootline-curated-static";
   provenance: {
-    sourcePaths: ["data/roots.ts", "data/words.ts"];
+    sourcePaths: string[];
     contentHash: string;
-    importedBy: "rootline-morphology-gold-projection";
+    importedBy: string;
   };
   roots: GoldRoot[];
   words: GoldWord[];
 }
+
+export type GoldDatasetV1 = GoldDataset & { version: "gold-v1" };
+export type GoldDatasetV2 = GoldDataset & { version: "gold-v2" };
 
 export interface RootExpansionCandidate {
   root: string;
