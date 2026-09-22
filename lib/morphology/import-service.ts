@@ -5,7 +5,8 @@ import type {
   GoldRoot,
   GoldWord,
   MorphologyConfidenceV2,
-  MorphologyReviewStatus
+  MorphologyReviewStatus,
+  RootProvenance
 } from "@/lib/morphology/types";
 import type { ProductionVocabularyEntry } from "@/types/vocabulary";
 
@@ -17,6 +18,13 @@ export interface PersistedMorphologyState {
     id: string;
     datasetVersion: string;
     rootKey: string;
+    contentHash: string;
+  }>;
+  variants: Array<{
+    id: string;
+    datasetVersion: string;
+    rootKey: string;
+    form: string;
     contentHash: string;
   }>;
   families: Array<{
@@ -68,10 +76,20 @@ export interface MorphologyImportRecord {
   contentHash: string;
 }
 
+export interface MorphologyImportVariant {
+  rootKey: string;
+  form: string;
+  relation: "historical" | "pedagogical";
+  explanation: string;
+  provenance: RootProvenance;
+  contentHash: string;
+}
+
 export interface MorphologyImportPlan {
   payload: {
     dataset: GoldDataset;
     roots: Array<GoldRoot & { contentHash: string }>;
+    variants: MorphologyImportVariant[];
     families: Array<{
       familyKey: string;
       displayName: string;
@@ -86,6 +104,7 @@ export interface MorphologyImportPlan {
   summary: {
     dataset: "insert" | "unchanged" | "error";
     goldRoots: ChangeCounts;
+    rootVariants: ChangeCounts;
     families: ChangeCounts;
     goldWords: ChangeCounts;
     segments: ChangeCounts;
@@ -110,8 +129,8 @@ export function buildMorphologyImportPlan({
   vocabulary: readonly VocabularyWord[];
   persisted: PersistedMorphologyState;
 }): MorphologyImportPlan {
-  const existingDataset = persisted.datasets.find((item) => item.version === dataset.version);
   const errors: string[] = [];
+  const existingDataset = persisted.datasets.find((item) => item.version === dataset.version);
   if (existingDataset && existingDataset.contentHash !== dataset.provenance.contentHash) {
     errors.push(
       `Dataset version ${dataset.version} already exists with a different content hash; create a new dataset version.`
@@ -119,22 +138,18 @@ export function buildMorphologyImportPlan({
   }
 
   const roots = dataset.roots.map((root) => ({ ...root, contentHash: hash(root) }));
-  const rootMeaning = new Map(dataset.roots.map((root) => [root.rootKey, root.meaningEn.join(", ")]));
-  const families = dataset.words.map((word) => {
+  const variants = dataset.roots.flatMap((root) => (root.variants ?? []).map((variant) => {
     const value = {
-      familyKey: familyKey(word),
-      displayName: `${word.lemma} morphology family`,
-      primaryRootKey: word.rootIds[0] ?? null,
-      formationExplanation: word.formationExplanation,
-      source: "gold-dataset" as const,
-      provenance: {
-        datasetVersion: dataset.version,
-        sourceWordId: word.wordId,
-        teachingFamily: word.teachingFamily
-      }
+      rootKey: root.rootKey,
+      form: variant.form,
+      relation: variant.relation,
+      explanation: variant.explanation,
+      provenance: variant.provenance
     };
     return { ...value, contentHash: hash(value) };
-  });
+  }));
+  const rootMeaning = new Map(dataset.roots.map((root) => [root.rootKey, root.meaningEn.join(", ")]));
+  const families = buildFamilies(dataset, errors);
 
   const goldRecords = dataset.words.map((word) => goldRecord(dataset, word, rootMeaning));
   const goldByLemma = new Map(
@@ -172,6 +187,9 @@ export function buildMorphologyImportPlan({
   const rootCounts = countChanges(roots, persisted.roots.filter(
     (root) => root.datasetVersion === dataset.version
   ), (item) => item.rootKey);
+  const variantCounts = countChanges(variants, persisted.variants.filter(
+    (variant) => variant.datasetVersion === dataset.version
+  ), (item) => `${item.rootKey}:${item.form}`);
   const familyCounts = countChanges(families, persisted.families.filter(
     (family) => family.datasetVersion === dataset.version
   ), (item) => item.familyKey);
@@ -200,12 +218,14 @@ export function buildMorphologyImportPlan({
     payload: {
       dataset,
       roots,
+      variants,
       families,
       records: [...goldRecords, ...derivedRecords]
     },
     summary: {
       dataset: errors.length > 0 ? "error" : existingDataset ? "unchanged" : "insert",
       goldRoots: rootCounts,
+      rootVariants: variantCounts,
       families: familyCounts,
       goldWords: goldCounts,
       segments,
@@ -222,6 +242,63 @@ export function buildMorphologyImportPlan({
     },
     errors
   };
+}
+
+function buildFamilies(dataset: GoldDataset, errors: string[]): MorphologyImportPlan["payload"]["families"] {
+  type FamilyDraft = {
+    familyKey: string;
+    displayName: string;
+    primaryRootKey: string | null;
+    formationExplanation: string;
+    source: "gold-dataset";
+    sourceWordIds: string[];
+    teachingFamilies: string[][];
+  };
+
+  const familiesByKey = new Map<string, FamilyDraft>();
+  for (const word of dataset.words) {
+    const familyKeyValue = familyKey(word);
+    const displayName = word.lexicalFamily?.displayName ?? `${word.lemma} morphology family`;
+    const formationExplanation = word.lexicalFamily?.formationExplanation ?? word.formationExplanation;
+    const primaryRootKey = word.rootIds[0] ?? null;
+    const existing = familiesByKey.get(familyKeyValue);
+    if (existing) {
+      if (existing.displayName !== displayName
+        || existing.formationExplanation !== formationExplanation
+        || existing.primaryRootKey !== primaryRootKey) {
+        errors.push(`Lexical family ${familyKeyValue} has inconsistent display, explanation, or canonical root data.`);
+        continue;
+      }
+      existing.sourceWordIds.push(word.wordId);
+      existing.teachingFamilies.push(word.teachingFamily);
+      continue;
+    }
+    familiesByKey.set(familyKeyValue, {
+      familyKey: familyKeyValue,
+      displayName,
+      primaryRootKey,
+      formationExplanation,
+      source: "gold-dataset",
+      sourceWordIds: [word.wordId],
+      teachingFamilies: [word.teachingFamily]
+    });
+  }
+
+  return [...familiesByKey.values()].map((family) => {
+    const value = {
+      familyKey: family.familyKey,
+      displayName: family.displayName,
+      primaryRootKey: family.primaryRootKey,
+      formationExplanation: family.formationExplanation,
+      source: family.source,
+      provenance: {
+        datasetVersion: dataset.version,
+        sourceWordIds: family.sourceWordIds,
+        teachingFamilies: family.teachingFamilies
+      }
+    };
+    return { ...value, contentHash: hash(value) };
+  });
 }
 
 function goldRecord(

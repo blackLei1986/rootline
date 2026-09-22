@@ -237,6 +237,10 @@ export interface Database {
         id: string; dataset_id: string; root_key: string; meaning_en: Json; meaning_zh: Json;
         educational_content: Json; provenance: Json; created_at: string;
       }>;
+      morphology_root_variants: TableDefinition<{
+        id: string; dataset_id: string; canonical_root_id: string; variant_form: string;
+        relation: "historical" | "pedagogical"; explanation: string; provenance: Json; created_at: string;
+      }>;
       morphology_families: TableDefinition<{
         id: string; dataset_id: string; primary_root_id: string | null; family_key: string; display_name: string;
         formation_explanation: string | null; source: string; provenance: Json; created_at: string;
@@ -254,9 +258,9 @@ export interface Database {
         explanation: string | null; provenance: Json;
       }>;
       morphology_review_events: TableDefinition<{
-        id: string; record_id: string | null; entity_type: "dataset" | "word-record"; entity_id: string;
+        id: string; record_id: string | null; entity_type: "dataset" | "word-record" | "root-variant"; entity_id: string;
         word_id: string | null;
-        action: "gold-import" | "derived-create" | "approve" | "edit" | "reject" | "re-import" | "version-change" | "reopen" | "import";
+        action: "gold-import" | "derived-create" | "approve" | "edit" | "reject" | "re-import" | "version-change" | "reopen" | "import" | "root-variant-import";
         actor_id: string | null; actor: string | null; previous_snapshot: Json | null; result_snapshot: Json;
         reason: string | null; dataset_version: string; source: string; metadata: Json;
         idempotency_key: string | null; created_at: string;

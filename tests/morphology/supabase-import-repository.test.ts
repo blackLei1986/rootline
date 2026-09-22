@@ -12,6 +12,7 @@ describe("SupabaseMorphologyImportRepository", () => {
     const state = mapPersistedMorphologyState({
       datasets: [{ id: "dataset-1", version: "gold-v1", provenance: { contentHash: "dataset-hash" } }],
       roots: [{ id: "root-1", dataset_id: "dataset-1", root_key: "spect", provenance: { contentHash: "root-hash" } }],
+      variants: [{ id: "variant-1", dataset_id: "dataset-1", canonical_root_id: "root-1", variant_form: "specto", provenance: { contentHash: "variant-hash" } }],
       families: [{ id: "family-1", dataset_id: "dataset-1", family_key: "gold:inspect", provenance: { contentHash: "family-hash" } }],
       records: [{
         id: "record-1",
@@ -29,6 +30,7 @@ describe("SupabaseMorphologyImportRepository", () => {
     expect(state).toEqual({
       datasets: [{ id: "dataset-1", version: "gold-v1", contentHash: "dataset-hash" }],
       roots: [{ id: "root-1", datasetVersion: "gold-v1", rootKey: "spect", contentHash: "root-hash" }],
+      variants: [{ id: "variant-1", datasetVersion: "gold-v1", rootKey: "spect", form: "specto", contentHash: "variant-hash" }],
       families: [{ id: "family-1", datasetVersion: "gold-v1", familyKey: "gold:inspect", contentHash: "family-hash" }],
       records: [{
         id: "record-1",
@@ -62,7 +64,7 @@ describe("SupabaseMorphologyImportRepository", () => {
     const plan = buildMorphologyImportPlan({
       dataset: createGoldDatasetV1(),
       vocabulary: [],
-      persisted: { datasets: [], roots: [], families: [], records: [] }
+      persisted: { datasets: [], roots: [], variants: [], families: [], records: [] }
     });
 
     const result = await repository.apply(plan.payload, "test-importer");

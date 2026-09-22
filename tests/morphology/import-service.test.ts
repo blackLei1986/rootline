@@ -16,6 +16,7 @@ import type { ProductionVocabularyEntry } from "@/types/vocabulary";
 const emptyState: PersistedMorphologyState = {
   datasets: [],
   roots: [],
+  variants: [],
   families: [],
   records: []
 };
@@ -38,6 +39,13 @@ function appliedStateFrom(plan: ReturnType<typeof buildMorphologyImportPlan>): P
       datasetVersion: plan.payload.dataset.version,
       rootKey: root.rootKey,
       contentHash: root.contentHash
+    })),
+    variants: (plan.payload.variants ?? []).map((variant, index) => ({
+      id: `00000000-0000-4000-8000-${String(index + 300).padStart(12, "0")}`,
+      datasetVersion: plan.payload.dataset.version,
+      rootKey: variant.rootKey,
+      form: variant.form,
+      contentHash: variant.contentHash
     })),
     families: plan.payload.families.map((family, index) => ({
       id: `00000000-0000-4000-8000-${String(index + 500).padStart(12, "0")}`,
@@ -230,5 +238,24 @@ describe("buildMorphologyImportPlan", () => {
       .toMatchObject({ confidence: "derived", reviewStatus: "pending", familyKey: "act:action" });
     expect(plan.payload.records.some((record) => record.catalogWordId === "noise")).toBe(false);
     expect(plan.payload.records.some((record) => record.catalogWordId === "active" && record.source === "gold-dataset-exact-lemma")).toBe(false);
+  });
+
+  it("deduplicates explicit lexical families and persists root variants as atomic v2 payload members", () => {
+    const plan = buildMorphologyImportPlan({
+      dataset: createGoldDatasetV2(),
+      vocabulary: [],
+      persisted: emptyState
+    });
+
+    expect(plan.payload.families.filter((family) => family.familyKey === "act:action")).toHaveLength(1);
+    expect(plan.payload.variants).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        rootKey: "cap",
+        form: "cept",
+        relation: "historical",
+        provenance: expect.objectContaining({ sourceTitle: "Online Etymology Dictionary" })
+      })
+    ]));
+    expect(plan.summary.rootVariants).toEqual({ insert: 3, update: 0, unchanged: 0 });
   });
 });

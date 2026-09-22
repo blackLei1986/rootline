@@ -1,6 +1,6 @@
 begin;
 
-select plan(24);
+select plan(30);
 
 select has_function(
   'public',
@@ -202,6 +202,52 @@ select results_eq(
   $$ select action from public.morphology_review_events where dataset_version = 'test-atomic-v2' and entity_type = 'dataset' $$,
   array['version-change'::text],
   'dataset version changes are audited explicitly'
+);
+
+select lives_ok(
+  $$ select public.apply_morphology_import(
+    '{
+      "dataset": {"version": "test-variants-v2", "source": "test-gold", "provenance": {"contentHash": "variant-v2-hash"}},
+      "roots": [{"rootKey": "cap", "root": "cap", "meaningEn": ["take"], "meaningZh": ["拿"], "educationalContent": {"description": "take", "learningRationale": "test"}, "provenance": [{"sourceTitle": "fixture", "sourceUrl": "https://example.test/cap", "accessedAt": "2026-09-22", "evidenceNote": "fixture"}], "contentHash": "cap-root-hash"}],
+      "variants": [{"rootKey": "cap", "form": "cept", "relation": "historical", "explanation": "explicit cap form", "provenance": {"sourceTitle": "fixture", "sourceUrl": "https://example.test/cap", "accessedAt": "2026-09-22", "evidenceNote": "fixture"}, "contentHash": "cap-cept-hash"}],
+      "families": [], "records": []
+    }'::jsonb,
+    'integration-test'
+  ) $$,
+  'v2 import persists variants atomically with canonical roots'
+);
+select results_eq(
+  $$ select variant.variant_form from public.morphology_root_variants variant join public.morphology_datasets dataset on dataset.id = variant.dataset_id where dataset.version = 'test-variants-v2' order by variant.variant_form $$,
+  array['cept'::text],
+  'canonical root variants retain their explicit form'
+);
+select results_eq(
+  $$ select root.provenance->'rootProvenance'->0->>'sourceTitle' from public.morphology_roots root join public.morphology_datasets dataset on dataset.id = root.dataset_id where dataset.version = 'test-variants-v2' and root.root_key = 'cap' $$,
+  array['fixture'::text],
+  'root-specific source provenance is retained with dataset provenance'
+);
+select results_eq(
+  $$ select count(*) from public.morphology_review_events where dataset_version = 'test-variants-v2' and entity_type = 'root-variant' $$,
+  array[1::bigint],
+  'variant imports append an idempotent root-variant audit event'
+);
+select throws_ok(
+  $$ select public.apply_morphology_import(
+    '{
+      "dataset": {"version": "test-variant-rollback-v2", "source": "test", "provenance": {"contentHash": "variant-rollback-hash"}},
+      "roots": [],
+      "variants": [{"rootKey": "missing", "form": "cept", "relation": "historical", "explanation": "missing root", "provenance": {}, "contentHash": "missing-variant-hash"}],
+      "families": [], "records": []
+    }'::jsonb,
+    'integration-test'
+  ) $$,
+  '22023', null,
+  'unknown variant roots roll back the entire import'
+);
+select results_eq(
+  $$ select count(*) from public.morphology_datasets where version = 'test-variant-rollback-v2' $$,
+  array[0::bigint],
+  'bad variants roll back the dataset insert'
 );
 
 select throws_ok(

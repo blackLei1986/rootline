@@ -17,6 +17,13 @@ import {
 type RawState = {
   datasets: Array<{ id: string; version: string; provenance: unknown }>;
   roots: Array<{ id: string; dataset_id: string; root_key: string; provenance: unknown }>;
+  variants: Array<{
+    id: string;
+    dataset_id: string;
+    canonical_root_id: string;
+    variant_form: string;
+    provenance: unknown;
+  }>;
   families: Array<{ id: string; dataset_id: string; family_key: string; provenance: unknown }>;
   records: Array<{
     id: string;
@@ -45,9 +52,10 @@ export class SupabaseMorphologyImportRepository implements MorphologyImportPersi
   constructor(private readonly client: DatabaseClient) {}
 
   async loadState(): Promise<PersistedMorphologyState> {
-    const [datasetsResult, rootsResult, familiesResult, recordsResult] = await Promise.all([
+    const [datasetsResult, rootsResult, variantsResult, familiesResult, recordsResult] = await Promise.all([
       this.client.from("morphology_datasets").select("id,version,provenance"),
       this.client.from("morphology_roots").select("id,dataset_id,root_key,provenance"),
+      this.client.from("morphology_root_variants").select("id,dataset_id,canonical_root_id,variant_form,provenance"),
       this.client.from("morphology_families").select("id,dataset_id,family_key,provenance"),
       this.client
         .from("word_morphology_records")
@@ -56,12 +64,14 @@ export class SupabaseMorphologyImportRepository implements MorphologyImportPersi
 
     throwRepositoryError(datasetsResult.error, "load morphology datasets");
     throwRepositoryError(rootsResult.error, "load morphology roots");
+    throwRepositoryError(variantsResult.error, "load morphology root variants");
     throwRepositoryError(familiesResult.error, "load morphology families");
     throwRepositoryError(recordsResult.error, "load morphology records");
 
     return mapPersistedMorphologyState({
       datasets: (datasetsResult.data ?? []) as RawState["datasets"],
       roots: (rootsResult.data ?? []) as RawState["roots"],
+      variants: (variantsResult.data ?? []) as RawState["variants"],
       families: (familiesResult.data ?? []) as RawState["families"],
       records: (recordsResult.data ?? []) as unknown as RawState["records"]
     });
@@ -82,6 +92,7 @@ export class SupabaseMorphologyImportRepository implements MorphologyImportPersi
 
 export function mapPersistedMorphologyState(raw: RawState): PersistedMorphologyState {
   const versionByDatasetId = new Map(raw.datasets.map((dataset) => [dataset.id, dataset.version]));
+  const rootById = new Map(raw.roots.map((root) => [root.id, root]));
   return {
     datasets: raw.datasets.map((dataset) => ({
       id: dataset.id,
@@ -94,6 +105,17 @@ export function mapPersistedMorphologyState(raw: RawState): PersistedMorphologyS
       rootKey: root.root_key,
       contentHash: contentHash(root.provenance)
     })),
+    variants: raw.variants.map((variant) => {
+      const root = rootById.get(variant.canonical_root_id);
+      if (!root) throw new Error(`Missing canonical morphology root ${variant.canonical_root_id}.`);
+      return {
+        id: variant.id,
+        datasetVersion: requiredDatasetVersion(versionByDatasetId, variant.dataset_id),
+        rootKey: root.root_key,
+        form: variant.variant_form,
+        contentHash: contentHash(variant.provenance)
+      };
+    }),
     families: raw.families.map((family) => ({
       id: family.id,
       datasetVersion: requiredDatasetVersion(versionByDatasetId, family.dataset_id),
