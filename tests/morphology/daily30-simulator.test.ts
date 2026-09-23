@@ -38,6 +38,25 @@ describe("simulateDaily30", () => {
 
     expect(report.days[0]).toMatchObject({ filledSlots: 0, shortfall: 30, noneConfidenceFallbackCount: 0 });
     expect(report.days[0]?.qualityWarnings).toContain("family-concentration");
+    expect(report.summary.shortfallCauses["family-concentration"]).toBe(30);
     expect(report.readiness).toBe("NOT_READY_FOR_PHASE_1B");
+  });
+
+  it("uses a deep root through its daily pool instead of excluding it after fifteen candidates", () => {
+    const deep = ["act", "aud"].flatMap((rootKey) => (
+      Array.from({ length: 30 }, (_, index) => candidate(rootKey, index + 1))
+    ));
+    const report = simulateDaily30({ days: 2, candidates: deep });
+
+    expect(report.days.map((day) => day.filledSlots)).toEqual([30, 30]);
+    expect(report.days.every((day) => day.rootClusters.length === 2)).toBe(true);
+    expect(report.summary.shortfallCauses).toEqual({});
+  });
+
+  it("attributes a one-root shortfall to the root-cluster constraint", () => {
+    const report = simulateDaily30({ days: 1, candidates: Array.from({ length: 15 }, (_, index) => candidate("act", index + 1)) });
+
+    expect(report.days[0]?.filledSlots).toBe(0);
+    expect(report.summary.shortfallCauses["root-cluster-constraint"]).toBe(30);
   });
 });

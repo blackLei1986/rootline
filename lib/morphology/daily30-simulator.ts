@@ -13,6 +13,15 @@ export interface Daily30Candidate {
   rootPedagogicalConfidence: number | null;
 }
 
+export type Daily30ShortfallCause =
+  | "eligible-word-exhaustion"
+  | "root-cluster-constraint"
+  | "family-concentration"
+  | "other-quality-exclusion";
+
+type Daily30QualityWarning = "insufficient-root-capacity" | "family-concentration" | "no-eligible-candidates";
+type ShortfallCauses = Partial<Record<Daily30ShortfallCause, number>>;
+
 export interface Daily30SimulationReport {
   days: Array<{
     day: number;
@@ -21,9 +30,10 @@ export interface Daily30SimulationReport {
     filledSlots: number;
     shortfall: number;
     noneConfidenceFallbackCount: 0;
-    qualityWarnings: Array<"insufficient-root-capacity" | "family-concentration" | "no-eligible-candidates">;
+    qualityWarnings: Daily30QualityWarning[];
+    shortfallCauses: ShortfallCauses;
   }>;
-  summary: { eligibleCandidates: number; filledSlots: number; targetSlots: number; distinctRoots: number };
+  summary: { eligibleCandidates: number; filledSlots: number; targetSlots: number; distinctRoots: number; shortfallCauses: ShortfallCauses };
   readiness: "READY_FOR_PHASE_1B" | "NOT_READY_FOR_PHASE_1B";
   limitingMetrics: string[];
 }
@@ -35,6 +45,12 @@ export function simulateDaily30({ days = 14, candidates }: { days?: number; cand
   const daily = Array.from({ length: days }, (_, index) => buildDay(index + 1, eligible, selectedIds));
   const filledSlots = daily.reduce((sum, day) => sum + day.filledSlots, 0);
   const distinctRoots = new Set(eligible.map((candidate) => candidate.rootKey)).size;
+  const shortfallCauses: ShortfallCauses = {};
+  for (const day of daily) {
+    for (const [cause, count] of Object.entries(day.shortfallCauses) as Array<[Daily30ShortfallCause, number]>) {
+      shortfallCauses[cause] = (shortfallCauses[cause] ?? 0) + count;
+    }
+  }
   const limitingMetrics: string[] = [];
   if (eligible.length < 420) limitingMetrics.push(`eligible-usable-words:${eligible.length}<420`);
   if (filledSlots < days * 30) limitingMetrics.push(`filled-slots:${filledSlots}<${days * 30}`);
@@ -43,7 +59,7 @@ export function simulateDaily30({ days = 14, candidates }: { days?: number; cand
   if (distinctRoots < 2) limitingMetrics.push(`distinct-roots:${distinctRoots}<2`);
   return {
     days: daily,
-    summary: { eligibleCandidates: eligible.length, filledSlots, targetSlots: days * 30, distinctRoots },
+    summary: { eligibleCandidates: eligible.length, filledSlots, targetSlots: days * 30, distinctRoots, shortfallCauses },
     readiness: limitingMetrics.length === 0 ? "READY_FOR_PHASE_1B" : "NOT_READY_FOR_PHASE_1B",
     limitingMetrics
   };
@@ -57,22 +73,31 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
     group.push(candidate);
     byRoot.set(candidate.rootKey, group);
   }
-  const warnings: Daily30SimulationReport["days"][number]["qualityWarnings"] = [];
+  const warnings: Daily30QualityWarning[] = [];
   const rootGroups = [...byRoot.entries()].map(([rootKey, words]) => ({
     rootKey,
-    words: words.sort(candidateOrder),
+    words: words.sort(candidateOrder).slice(0, 15),
     familyCount: new Set(words.map((word) => word.familyKey ?? `ungrouped:${word.catalogWordId}`)).size,
     pedagogicalConfidence: Math.max(...words.map((word) => word.rootPedagogicalConfidence ?? 0))
-  })).filter((group) => group.words.length >= 5 && group.words.length <= 15);
+  })).filter((group) => group.words.length >= 5);
   if (rootGroups.some((group) => group.familyCount < 2)) warnings.push("family-concentration");
   const viable = rootGroups.filter((group) => group.familyCount >= 2).sort((left, right) => (
     right.familyCount - left.familyCount || right.words.length - left.words.length || right.pedagogicalConfidence - left.pedagogicalConfidence || left.rootKey.localeCompare(right.rootKey, "en")
   ));
   const clusters = viable.slice(0, 4);
   if (clusters.length < 2) {
-    if (!warnings.includes("family-concentration") && remaining.length > 0) warnings.push("insufficient-root-capacity");
-    if (remaining.length === 0) warnings.push("no-eligible-candidates");
-    return { day, rootClusters: [], selectedWords: [], filledSlots: 0, shortfall: 30, noneConfidenceFallbackCount: 0, qualityWarnings: warnings };
+    const cause: Daily30ShortfallCause = remaining.length === 0
+      ? "eligible-word-exhaustion"
+      : warnings.includes("family-concentration")
+        ? "family-concentration"
+        : rootGroups.length < 2
+          ? "root-cluster-constraint"
+          : "family-concentration";
+    if (cause === "eligible-word-exhaustion") warnings.push("no-eligible-candidates");
+    else if (cause === "family-concentration") {
+      if (!warnings.includes("family-concentration")) warnings.push("family-concentration");
+    } else warnings.push("insufficient-root-capacity");
+    return { day, rootClusters: [], selectedWords: [], filledSlots: 0, shortfall: 30, noneConfidenceFallbackCount: 0, qualityWarnings: warnings, shortfallCauses: { [cause]: 30 } };
   }
   const selected: Daily30Candidate[] = [];
   const perFamily = new Map<string, number>();
@@ -86,8 +111,18 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
       perFamily.set(key, (perFamily.get(key) ?? 0) + 1);
     }
   }
-  if (selected.length < 30) warnings.push("family-concentration");
-  return { day, rootClusters: clusters.map((group) => group.rootKey), selectedWords: selected, filledSlots: selected.length, shortfall: 30 - selected.length, noneConfidenceFallbackCount: 0, qualityWarnings: warnings };
+  const shortfall = 30 - selected.length;
+  if (shortfall > 0) warnings.push("family-concentration");
+  return {
+    day,
+    rootClusters: [...new Set(selected.map((word) => word.rootKey))],
+    selectedWords: selected,
+    filledSlots: selected.length,
+    shortfall,
+    noneConfidenceFallbackCount: 0,
+    qualityWarnings: warnings,
+    shortfallCauses: shortfall > 0 ? { "family-concentration": shortfall } : {}
+  };
 }
 
 function candidateOrder(left: Daily30Candidate, right: Daily30Candidate): number {
