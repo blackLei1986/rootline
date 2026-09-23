@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createFullVocabularyProductionReport } from "@/lib/vocabulary-production-report";
+import { createFullVocabularyProductionReport, type FullVocabularyProductionReport } from "@/lib/vocabulary-production-report";
 import { buildContextQuestions } from "@/lib/today/context-questions";
 import { normalizeTodayPlan, TODAY_STAGE_ORDER } from "@/types/today";
 import { runAccountCloudAudit } from "./account-cloud-audit";
@@ -20,6 +20,13 @@ export interface FinalAcceptanceResult {
   acceptedLemmaCount: number;
   passed: boolean;
   results: AcceptanceCheck[];
+}
+
+export function passesFinalVocabularyGate(report: Pick<FullVocabularyProductionReport, "finalGatePassed" | "targetGatePassed" | "duplicateCandidates" | "tierDepthIssues">): boolean {
+  return report.finalGatePassed
+    && report.targetGatePassed
+    && report.duplicateCandidates.length === 0
+    && report.tierDepthIssues.length === 0;
 }
 
 function fileExists(root: string, rel: string): boolean {
@@ -184,8 +191,8 @@ export async function buildFinalProductAcceptance(root: string): Promise<FinalAc
     },
     {
       name: "vocabularyGate",
-      passed: report.finalGatePassed && report.duplicateCandidates.length === 0 && report.tierDepthIssues.length === 0,
-      detail: `final gate ${report.finalGatePassed}, duplicates ${report.duplicateCandidates.length}, tier-depth issues ${report.tierDepthIssues.length}.`
+      passed: passesFinalVocabularyGate(report),
+      detail: `final gate ${report.finalGatePassed}, target gate ${report.targetGatePassed}, duplicates ${report.duplicateCandidates.length}, tier-depth issues ${report.tierDepthIssues.length}.`
     },
     { name: "accountFlow", passed: accountAudit.missing.length === 0, detail: accountAudit.missing.length === 0 ? `${accountAudit.checks} account checks passed.` : `${accountAudit.missing.length} account checks missing: ${accountAudit.missing.join("; ")}` },
     { name: "rls", passed: fileMatches(root, "supabase/tests/account_learning_rls.test.sql", /owner can insert|another user cannot|anonymous users cannot/i), detail: "RLS policy tests reference owner-allow, cross-user-deny, and anonymous-deny assertions." },

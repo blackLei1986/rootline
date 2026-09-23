@@ -43,13 +43,14 @@ The best result has 0 `none`-confidence selections, 0 duplicate selected lemmas,
 
 ## Verification
 
-- Unit/integration suite: **77 files, 262 tests passed**.
+- Unit/integration suite: **77 files, 263 tests passed** (including reviewer regression coverage for the configured target gate and dataset version).
 - Local pgTAP: **61/61 passed** across four SQL test files.
 - Lint: passed.
 - TypeScript: passed (`tsc --noEmit`).
 - Production build: passed.
 - Vocabulary audit: passed; no broken references, duplicate IDs, invalid frequency, missing source, or malformed master fields. It still reports 149 missing CEFR annotations in the existing sample data.
 - Production vocabulary report: **9,750 accepted**, final and target gates passed, 100% required coverage, zero duplicate candidates/review/tier-depth issues.
+- Vocabulary provenance version: `2026.09.production-v2` in both manifest and persisted reading index; no lemma-ID migrations were needed.
 - Gold-v5 dry-run/apply/reapply and persisted coverage: passed; no remote production system was contacted.
 - `git diff --check`: passed.
 

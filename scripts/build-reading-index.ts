@@ -1,5 +1,6 @@
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { PRODUCTION_VOCABULARY_VERSION } from "@/config/vocabulary-version";
 import { passesProductionAcceptedMinimum } from "@/lib/vocabulary-production-report";
 import type { ProductionVocabularyEntry } from "@/types";
 
@@ -34,7 +35,7 @@ async function main() {
     coverageTags: entry.coverageTags
   }));
   const output = {
-    vocabularyVersion: "2026.09.production-v1",
+    vocabularyVersion: PRODUCTION_VOCABULARY_VERSION,
     acceptedLemmaCount: entries.length,
     entries
   };

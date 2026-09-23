@@ -1,6 +1,7 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { words } from "@/data/words";
+import { PRODUCTION_VOCABULARY_VERSION } from "@/config/vocabulary-version";
 import { computeProductionTierTargets } from "@/lib/vocabulary-production-plan";
 import { excludeProductionLemmas, parseExcludedProductionLemmas } from "@/lib/vocabulary-production-review";
 import { isWithinAcceptedLemmaTarget, passesAcceptedMinimum } from "@/lib/vocabulary-production-report";
@@ -230,7 +231,7 @@ async function main() {
   const sourceCount = fullCatalog.filter((entry) => entry.sourceMetadata.frequencySources.length > 0).length;
   const tierCount = fullCatalog.filter((entry) => entry.contentTier).length;
   const manifest = {
-    version: "2026.09.production-v1", generatedAt, target, acceptedLemmaCount: allAccepted, importedAcceptedLemmaCount: catalog.length,
+    version: PRODUCTION_VOCABULARY_VERSION, generatedAt, target, acceptedLemmaCount: allAccepted, importedAcceptedLemmaCount: catalog.length,
     existingAcceptedLemmaCount: existingAccepted.size, surfaceFormCount: new Set(fullCatalog.flatMap((entry) => entry.surfaceForms)).size, wordFamilyCount: new Set(fullCatalog.map((entry) => entry.wordFamilyId)).size,
     tierCounts: Object.fromEntries((["tier-1-core", "tier-2-important", "tier-3-recognition", "tier-4-extension"] as ContentTier[]).map((tier) => [tier, fullCatalog.filter((entry) => entry.contentTier === tier).length])),
     sources: [{ name: "ECDICT", license: "MIT", url: "https://github.com/skywind3000/ECDICT" }, { name: "Open English WordNet 2025", license: "CC-BY 4.0", url: "https://en-word.net/" }],

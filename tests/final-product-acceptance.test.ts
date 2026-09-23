@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { buildFinalProductAcceptance, runTodayPlanInvariantChecks } from "@/scripts/final-product-acceptance";
+import { buildFinalProductAcceptance, passesFinalVocabularyGate, runTodayPlanInvariantChecks } from "@/scripts/final-product-acceptance";
 
 const REQUIRED_NAMES = [
   "acceptedLemmaCount",
@@ -22,6 +22,12 @@ const REQUIRED_NAMES = [
 ];
 
 describe("final product acceptance", () => {
+  it("requires the configured vocabulary target gate, not just the final minimum", () => {
+    const report = { finalGatePassed: true, targetGatePassed: false, duplicateCandidates: [], tierDepthIssues: [] };
+    expect(passesFinalVocabularyGate(report)).toBe(false);
+    expect(passesFinalVocabularyGate({ ...report, targetGatePassed: true })).toBe(true);
+  });
+
   it("produces every named acceptance result", async () => {
     const result = await buildFinalProductAcceptance(process.cwd());
     const names = result.results.map((check) => check.name);

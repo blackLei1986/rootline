@@ -4,11 +4,15 @@ import { resolve } from "node:path";
 import { words } from "@/data/words";
 import { ACCEPTED_LEMMA_TARGET_MAX, createFullVocabularyProductionReport, createVocabularyProductionReport, isWithinAcceptedLemmaTarget, passesAcceptedMinimum } from "@/lib/vocabulary-production-report";
 import { computeProductionTierTargets } from "@/lib/vocabulary-production-plan";
+import { PRODUCTION_VOCABULARY_VERSION } from "@/config/vocabulary-version";
 import type { ProductionVocabularyEntry } from "@/types";
 
 describe("vocabulary production report", () => {
   it("allows the master vocabulary target to reach approximately 10,000 accepted lemmas", () => {
+    expect(PRODUCTION_VOCABULARY_VERSION).toBe("2026.09.production-v2");
     expect(ACCEPTED_LEMMA_TARGET_MAX).toBe(10_000);
+    expect(isWithinAcceptedLemmaTarget(8_499)).toBe(false);
+    expect(isWithinAcceptedLemmaTarget(8_500)).toBe(true);
     expect(isWithinAcceptedLemmaTarget(9_750)).toBe(true);
     expect(isWithinAcceptedLemmaTarget(10_001)).toBe(false);
   });
@@ -35,8 +39,11 @@ describe("vocabulary production report", () => {
       .flatMap((file) => JSON.parse(readFileSync(resolve(directory, file), "utf8")) as ProductionVocabularyEntry[]);
     const report = createFullVocabularyProductionReport(catalog);
     const searchIndex = JSON.parse(readFileSync(resolve(directory, "index.json"), "utf8")) as unknown[];
-    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "data/vocabulary/production-manifest.json"), "utf8")) as { target: number; acceptedLemmaCount: number; wordFamilyCount: number };
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "data/vocabulary/production-manifest.json"), "utf8")) as { version: string; target: number; acceptedLemmaCount: number; wordFamilyCount: number };
+    const readingIndex = JSON.parse(readFileSync(resolve(process.cwd(), "data/vocabulary/reading-index.json"), "utf8")) as { vocabularyVersion: string };
 
+    expect(manifest.version).toBe(PRODUCTION_VOCABULARY_VERSION);
+    expect(readingIndex.vocabularyVersion).toBe(PRODUCTION_VOCABULARY_VERSION);
     expect(manifest.target).toBeGreaterThanOrEqual(8_500);
     expect(manifest.target).toBeLessThanOrEqual(ACCEPTED_LEMMA_TARGET_MAX);
     expect(report.acceptedLemmaCount).toBe(manifest.acceptedLemmaCount);
