@@ -12,8 +12,6 @@ const accessedAt = "2026-09-22" as const;
 
 const seeds: Seed[] = [
   { rootKey: "act", familyKey: "enact", word: "enact", sourceWord: "enact", evidenceNote: "enact is formed from en- plus act; the cited history traces act to Latin actus." },
-  { rootKey: "gen", familyKey: "generous", word: "generous", sourceWord: "generous", evidenceNote: "The cited history derives generous from Latin generosus and genus." },
-  { rootKey: "gen", familyKey: "degenerate", word: "degenerate", sourceWord: "degenerate", evidenceNote: "The cited history derives degenerate from Latin de genere and genus." },
   { rootKey: "graph", familyKey: "geographic", word: "geographic", sourceWord: "geographic", evidenceNote: "The cited history derives geographic from Greek geographikos, whose graph element is writing or description." },
   { rootKey: "loc", familyKey: "dislocation", word: "dislocation", sourceWord: "dislocation", evidenceNote: "The cited history identifies dislocation as a location derivative from Latin locus." },
   { rootKey: "loc", familyKey: "locus", word: "locus", sourceWord: "locus", evidenceNote: "The cited history identifies locus as the Latin source meaning place." },

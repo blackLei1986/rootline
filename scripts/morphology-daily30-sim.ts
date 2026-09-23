@@ -6,6 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { simulateDaily30 } from "@/lib/morphology/daily30-simulator";
+import { buildEffectiveDailyCapacityReport } from "@/lib/morphology/daily30-capacity-planner";
 import { buildPersistedRootExpansionReport } from "@/lib/morphology/root-expansion-service";
 import { SupabaseMorphologyCoverageRepository } from "@/lib/repositories/supabase/morphology-coverage-repository";
 import type { Database } from "@/types/database";
@@ -15,6 +16,7 @@ async function main(): Promise<void> {
   const datasetArgument = process.argv.find((argument) => argument.startsWith("--dataset="));
   const daysArgument = process.argv.find((argument) => argument.startsWith("--days="));
   const strategyArgument = process.argv.find((argument) => argument.startsWith("--strategy="));
+  const includeCapacityReport = process.argv.includes("--include-capacity-report");
   const datasetVersion = z.string().trim().min(1).parse(datasetArgument?.slice("--dataset=".length));
   const days = z.coerce.number().int().positive().parse(daysArgument?.slice("--days=".length) ?? "14");
   const strategy = z.enum(["balanced", "scarcity-aware"]).parse(strategyArgument?.slice("--strategy=".length) ?? "balanced");
@@ -42,7 +44,14 @@ async function main(): Promise<void> {
       rootPedagogicalConfidence: confidenceByRoot.get(rootKey) ?? null
     }));
   });
-  console.log(JSON.stringify(simulateDaily30({ days, candidates, strategy }), null, 2));
+  const simulation = simulateDaily30({ days, candidates, strategy });
+  console.log(JSON.stringify(
+    includeCapacityReport
+      ? { simulation, effectiveCapacity: buildEffectiveDailyCapacityReport({ candidates, simulation }) }
+      : simulation,
+    null,
+    2
+  ));
 }
 
 function loadMissingLocalEnvironment(): void {

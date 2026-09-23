@@ -56,27 +56,44 @@ export class SupabaseMorphologyCoverageRepository {
     }
 
     const datasetId = datasetResult.data.id;
-    const [rootsResult, variantsResult, familiesResult, recordsResult] = await Promise.all([
+    const [rootsResult, variantsResult, familiesResult, records] = await Promise.all([
       this.client.from("morphology_roots").select("id,root_key,educational_content,provenance").eq("dataset_id", datasetId),
       this.client.from("morphology_root_variants").select("canonical_root_id,variant_form,relation,explanation,provenance").eq("dataset_id", datasetId),
       this.client.from("morphology_families").select("id,family_key").eq("dataset_id", datasetId),
-      this.client
-        .from("word_morphology_records")
-        .select("catalog_word_id,confidence,review_status,source,provenance,family_id,word_morphology_segments(root_id)")
-        .eq("dataset_id", datasetId)
+      collectPagedRecords(async (from, to) => {
+        const result = await this.client
+          .from("word_morphology_records")
+          .select("catalog_word_id,confidence,review_status,source,provenance,family_id,word_morphology_segments(root_id)")
+          .eq("dataset_id", datasetId)
+          .range(from, to);
+        throwRepositoryError(result.error, "load persisted morphology records");
+        return (result.data ?? []) as unknown as RawCoverageData["records"];
+      })
     ]);
     throwRepositoryError(rootsResult.error, "load persisted morphology roots");
     throwRepositoryError(variantsResult.error, "load persisted morphology root variants");
     throwRepositoryError(familiesResult.error, "load persisted morphology families");
-    throwRepositoryError(recordsResult.error, "load persisted morphology records");
 
     return mapPersistedCoverageData({
       datasetVersion,
       roots: (rootsResult.data ?? []) as RawCoverageData["roots"],
       variants: (variantsResult.data ?? []) as RawCoverageData["variants"],
       families: (familiesResult.data ?? []) as RawCoverageData["families"],
-      records: (recordsResult.data ?? []) as unknown as RawCoverageData["records"]
+      records
     });
+  }
+}
+
+const recordPageSize = 1_000;
+
+export async function collectPagedRecords<T>(
+  fetchPage: (from: number, to: number) => Promise<readonly T[]>
+): Promise<T[]> {
+  const records: T[] = [];
+  for (let from = 0; ; from += recordPageSize) {
+    const page = await fetchPage(from, from + recordPageSize - 1);
+    records.push(...page);
+    if (page.length < recordPageSize) return records;
   }
 }
 

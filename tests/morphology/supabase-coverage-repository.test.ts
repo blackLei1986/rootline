@@ -1,8 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { mapPersistedCoverageData } from "@/lib/repositories/supabase/morphology-coverage-repository";
+import { collectPagedRecords, mapPersistedCoverageData } from "@/lib/repositories/supabase/morphology-coverage-repository";
 
 describe("mapPersistedCoverageData", () => {
+  it("collects every page rather than silently truncating a dataset at the provider row limit", async () => {
+    const rows = Array.from({ length: 1_001 }, (_, index) => ({ id: index }));
+    const calls: number[] = [];
+
+    const actual = await collectPagedRecords(async (from, to) => {
+      calls.push(from);
+      return rows.slice(from, to + 1);
+    });
+
+    expect(actual).toHaveLength(1_001);
+    expect(calls).toEqual([0, 1_000]);
+  });
+
   it("reconstructs morphology roots and families from persisted foreign keys", () => {
     const data = mapPersistedCoverageData({
       datasetVersion: "gold-v1",
