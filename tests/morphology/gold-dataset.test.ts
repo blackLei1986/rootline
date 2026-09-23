@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createGoldDatasetV1,
   createGoldDatasetV2,
-  createGoldDatasetV3
+  createGoldDatasetV3,
+  createGoldDatasetV4
 } from "@/lib/morphology/gold-dataset";
 
 describe("createGoldDatasetV1", () => {
@@ -60,6 +61,19 @@ describe("createGoldDatasetV1", () => {
     expect(v3.words.filter((word) => word.wordId.startsWith("v3:")).every((word) => (
       word.lexicalFamily?.key.startsWith(`${word.rootIds[0]}:`)
       && word.provenance?.[0]?.sourceUrl.startsWith("https://")
+    ))).toBe(true);
+  });
+
+  it("keeps v3 immutable while v4 adds exact, explicitly-provenanced family breadth", () => {
+    const v3 = createGoldDatasetV3();
+    const v4 = createGoldDatasetV4();
+
+    expect(v4.version).toBe("gold-v4");
+    expect(v4.words.length).toBeGreaterThan(v3.words.length);
+    expect(v4.words.filter((word) => word.wordId.startsWith("v4:")).every((word) => (
+      word.rootIds.length === 1
+      && word.lexicalFamily?.key.startsWith(`${word.rootIds[0]}:`)
+      && word.provenance?.[0]?.sourceUrl.startsWith("https://www.etymonline.com/word/")
     ))).toBe(true);
   });
 });
