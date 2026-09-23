@@ -1,15 +1,17 @@
-import { buildContextQuestions } from "@/lib/today/context-questions";
-import { selectTodayArticle, type RecentArticleHistory } from "@/lib/today/article-selection";
+import type { RecentArticleHistory } from "@/lib/today/article-selection";
+import { buildDailyTargets, type DailyTargetCandidate } from "@/lib/today/daily-30-planner";
+import { shiftLearningDate } from "@/lib/today/local-date";
 import type { LearningStorage } from "@/types/progress";
+import type { TodaySessionDTO } from "@/types/today";
 import type { ArticleCandidate, ArticleVocabularyMatch } from "@/types/articles";
 import type { ProductionVocabularyEntry } from "@/types/vocabulary";
 import type { TodayPlan, TodayPlanDTO } from "@/types/today";
-import { categorizeTodayReadingDegradation, type ReadingAvailability, type ReadingDegradationReason } from "@/lib/today/degradation";
+import type { ReadingAvailability, ReadingDegradationReason } from "@/lib/today/degradation";
 
 export interface TodayPlanStore {
   getPlan(userId: string, learningDate: string): Promise<TodayPlan | null>;
   createPlan(userId: string, plan: TodayPlan): Promise<TodayPlan>;
-  hasSessionEvents(userId: string, planId: string): Promise<boolean>;
+  getSession?(userId: string, planId: string): Promise<TodaySessionDTO | null>;
 }
 
 export interface TodayArticleBundle {
@@ -22,6 +24,7 @@ export interface TodayServiceDependencies {
   plans: TodayPlanStore;
   getLearnerSnapshot(userId: string): Promise<LearningStorage>;
   getDailyVocabulary(learningDate: string): Promise<ProductionVocabularyEntry[]>;
+  getRootCoreCandidates?(vocabulary: readonly ProductionVocabularyEntry[]): Promise<DailyTargetCandidate[]>;
   getVocabularyEntries(wordIds: string[]): Promise<ProductionVocabularyEntry[]>;
   getArticleCandidates(userId: string): Promise<ArticleCandidate[]>;
   getRecentArticleHistory(userId: string): Promise<RecentArticleHistory[]>;
@@ -32,7 +35,6 @@ export interface TodayServiceDependencies {
 
 export interface TodayService {
   getOrCreateTodayPlan(userId: string, learningDate: string, now: Date): Promise<TodayPlanDTO>;
-  regenerateUnstartedTodayPlan(userId: string, learningDate: string, now: Date): Promise<TodayPlanDTO>;
 }
 
 export function createTodayService(dependencies: TodayServiceDependencies): TodayService {
@@ -41,101 +43,112 @@ export function createTodayService(dependencies: TodayServiceDependencies): Toda
       const stored = await dependencies.plans.getPlan(userId, learningDate);
       if (stored) return toDTO(stored, dependencies, userId);
 
-      const generated = await generatePlan(dependencies, userId, learningDate, now, 1);
+      const generated = await generateDaily30Plan(dependencies, userId, learningDate, now);
       const persisted = await dependencies.plans.createPlan(userId, generated);
       return toDTO(persisted, dependencies, userId);
-    },
-
-    async regenerateUnstartedTodayPlan(userId, learningDate, now) {
-      const stored = await dependencies.plans.getPlan(userId, learningDate);
-      if (!stored) {
-        const generated = await generatePlan(dependencies, userId, learningDate, now, 1);
-        return toDTO(await dependencies.plans.createPlan(userId, generated), dependencies, userId);
-      }
-      if (stored.status !== "not-started" || await dependencies.plans.hasSessionEvents(userId, stored.id)) {
-        throw new Error("Today plan has already started and cannot be regenerated.");
-      }
-
-      const generated = await generatePlan(dependencies, userId, learningDate, now, stored.version + 1);
-      return toDTO(await dependencies.plans.createPlan(userId, generated), dependencies, userId);
     }
   };
 }
 
-async function generatePlan(
+async function generateDaily30Plan(
   dependencies: TodayServiceDependencies,
   userId: string,
   learningDate: string,
-  now: Date,
-  version: number
+  now: Date
 ): Promise<TodayPlan> {
-  const [snapshot, vocabulary, candidates, recentHistory, suppliedAvailability] = await Promise.all([
+  const [snapshot, vocabulary] = await Promise.all([
     dependencies.getLearnerSnapshot(userId),
-    dependencies.getDailyVocabulary(learningDate),
-    dependencies.getArticleCandidates(userId),
-    dependencies.getRecentArticleHistory(userId),
-    dependencies.getReadingAvailability?.(userId)
+    dependencies.getDailyVocabulary(learningDate)
   ]);
-  const sessionMinutes = snapshot.settings.learningGoal.sessionMinutes;
-  const normalPlan = sessionMinutes === 20;
-  const reviewTarget = normalPlan ? 15 : Math.max(5, Math.round(sessionMinutes * 0.75));
-  const scanTarget = normalPlan ? 30 : Math.max(15, Math.round(sessionMinutes * 1.5));
-  const focusTarget = normalPlan ? 7 : Math.max(4, Math.round(sessionMinutes * 0.35));
-  const availability = suppliedAvailability ?? inferredAvailability(candidates.length);
-  let degradationReason = categorizeTodayReadingDegradation(availability);
-  const selected = degradationReason ? null : selectTodayArticle(candidates, recentHistory, 6);
-  let bundle: TodayArticleBundle | null = null;
-  if (selected) {
-    try {
-      bundle = await dependencies.getArticleBundle(userId, selected.articleId);
-      if (!bundle) degradationReason = "EXTRACTION_UNAVAILABLE";
-    } catch {
-      degradationReason = "EXTRACTION_UNAVAILABLE";
-    }
-  }
-  const contextQuestions = selected && bundle
-    ? buildContextQuestions(
-      { articleId: selected.articleId, text: bundle.text },
-      { valuableUnknownWordIds: selected.valuableUnknownWordIds, lexicalMatches: bundle.lexicalMatches },
-      vocabulary,
-      5
-    )
-    : [];
-  const articleEligible = Boolean(selected && bundle && contextQuestions.length === 5);
-  if (!articleEligible && !degradationReason) degradationReason = "NO_LEVEL_MATCH";
-  if (degradationReason) dependencies.reportDegradation?.({ userId, reason: degradationReason, availability });
-  const articleTargetIds = articleEligible ? selected!.valuableUnknownWordIds : [];
-  const rapidScanEntries = selectRapidScan(vocabulary, snapshot, articleTargetIds, scanTarget, now);
 
+  const rootCoreCandidates = await dependencies.getRootCoreCandidates?.(vocabulary) ?? [];
+  const morphologyByWord = new Map(rootCoreCandidates.flatMap((candidate) => {
+    const entry = vocabulary.find((word) => word.id === candidate.entry.id);
+    return entry ? [[entry.id, { ...candidate, entry }] as const] : [];
+  }));
+  const vocabularyById = new Map(vocabulary.map((entry) => [entry.id, entry]));
+  const weakCandidates = selectWeakCandidates(snapshot, vocabularyById, morphologyByWord, now);
+  const freshVocabulary = vocabulary.filter((entry) => !hasLearningEvidence(snapshot.words[entry.id]));
+  const freshById = new Map(freshVocabulary.map((entry) => [entry.id, entry]));
+  const freshRootCore = rootCoreCandidates.filter((candidate) => freshById.has(candidate.entry.id));
+  const priorDate = shiftLearningDate(learningDate, -1);
+  const previousPlan = await dependencies.plans.getPlan(userId, priorDate);
+  const previousSession = previousPlan && previousPlan.status !== "complete"
+    ? await dependencies.plans.getSession?.(userId, previousPlan.id) ?? null
+    : null;
+  const completedYesterday = new Set(previousSession?.completedTargetIds ?? []);
+  const carryoverTargets = previousPlan && previousPlan.status !== "complete" && previousSession?.status !== "complete"
+    ? (previousPlan?.dailyTargets ?? []).filter((target) => (
+      !completedYesterday.has(target.wordId)
+      && previousSession?.targetProgress?.[target.wordId]?.status !== "complete"
+    ))
+    : [];
+  const dailyTargets = buildDailyTargets({
+    carryoverTargets,
+    weakCandidates,
+    rootCoreCandidates: freshRootCore,
+    supportCandidates: freshVocabulary.map((entry) => ({ entry }))
+  });
+  const sessionMinutes = snapshot.settings.learningGoal.sessionMinutes;
   return {
     id: globalThis.crypto.randomUUID(),
     date: learningDate,
-    version,
+    version: 1,
     status: "not-started",
-    estimatedMinutes: normalPlan ? 22 : sessionMinutes + (articleEligible ? 2 : 0),
-    warmupReviewIds: selectDueReviewIds(snapshot, now, reviewTarget),
-    rapidScanEntries,
-    focusedLearningTarget: focusTarget,
-    sentenceTarget: focusTarget,
-    quizTarget: articleEligible ? 5 : Math.max(5, focusTarget),
-    readingCandidateIds: articleEligible ? articleTargetIds : [],
-    mix: { review: 40, newVocabulary: 30, reading: articleEligible ? 20 : 0, sentence: articleEligible ? 10 : 30 },
-    article: articleEligible ? {
-      articleId: selected!.articleId,
-      title: selected!.title,
-      sourceTitle: selected!.sourceTitle,
-      canonicalUrl: selected!.canonicalUrl,
-      estimatedMinutes: selected!.estimatedMinutes,
-      contentWordCoverage: selected!.contentWordCoverage,
-      targetWordIds: contextQuestions.map((question) => question.targetWordId),
-      selectionReasons: selected!.explanationCodes
-    } : null,
-    contextQuestions: articleEligible ? contextQuestions : [],
-    stages: articleEligible
-      ? ["warmup", "scan", "learn", "reading", "context-quiz", "summary"]
-      : ["warmup", "scan", "learn", "summary"],
-    degradationReason: articleEligible ? null : degradationReason
+    estimatedMinutes: sessionMinutes,
+    warmupReviewIds: [],
+    rapidScanEntries: [],
+    focusedLearningTarget: dailyTargets.length,
+    sentenceTarget: dailyTargets.length,
+    quizTarget: dailyTargets.length,
+    readingCandidateIds: [],
+    mix: { review: 0, newVocabulary: 100, reading: 0, sentence: 0 },
+    article: null,
+    contextQuestions: [],
+    stages: ["learn", "summary"],
+    degradationReason: dailyTargets.length < 30 ? "DAILY_TARGET_CATALOG_SHORTAGE" : null,
+    dailyTargets
   };
+}
+
+function selectWeakCandidates(
+  snapshot: LearningStorage,
+  vocabulary: ReadonlyMap<string, ProductionVocabularyEntry>,
+  morphologyByWord: ReadonlyMap<string, DailyTargetCandidate>,
+  now: Date
+): DailyTargetCandidate[] {
+  return Object.values(snapshot.words).flatMap((progress) => {
+    const entry = vocabulary.get(progress.wordId);
+    if (!entry || !isGenuinelyWeak(progress)) return [];
+    const dueBoost = progress.nextReviewAt && new Date(progress.nextReviewAt) <= now ? 2 : 0;
+    const weakness = progress.wrongCount * 10
+      + progress.verificationWrongCount * 15
+      + progress.unknownCount * 5
+      + (progress.recognitionState === "unknown" ? 20 : progress.recognitionState === "fuzzy" ? 10 : 0)
+      + Math.max(0, 40 - progress.fluencyScore)
+      + dueBoost;
+    return [{ ...(morphologyByWord.get(entry.id) ?? { entry }), entry, weakPriority: weakness }];
+  }).sort((left, right) => (right.weakPriority ?? 0) - (left.weakPriority ?? 0)
+    || left.entry.frequencyRank - right.entry.frequencyRank
+    || left.entry.id.localeCompare(right.entry.id, "en"));
+}
+
+function isGenuinelyWeak(progress: LearningStorage["words"][string]): boolean {
+  return progress.verificationWrongCount > 0
+    || progress.wrongCount >= 2
+    || (progress.wrongCount > 0 && progress.wrongCount >= progress.correctCount)
+    || (progress.recognitionState === "unknown" && progress.recognitionCount > 0)
+    || (progress.recognitionState === "fuzzy" && progress.recognitionCount >= 2)
+    || (progress.fluencyScore < 40 && progress.recognitionCount + progress.reviewCount >= 2);
+}
+
+function hasLearningEvidence(progress: LearningStorage["words"][string] | undefined): boolean {
+  return Boolean(progress && (
+    progress.status !== "new"
+    || progress.firstLearnedAt
+    || progress.recognitionCount > 0
+    || progress.reviewCount > 0
+  ));
 }
 
 async function toDTO(
@@ -143,6 +156,7 @@ async function toDTO(
   dependencies: TodayServiceDependencies,
   userId: string
 ): Promise<TodayPlanDTO> {
+  if (plan.dailyTargets) return { ...plan, warmupReviewEntries: [], article: null };
   const warmupReviewEntries = await dependencies.getVocabularyEntries(plan.warmupReviewIds);
   if (!plan.article) return { ...plan, warmupReviewEntries, article: null };
   const bundle = await dependencies.getArticleBundle(userId, plan.article.articleId);
@@ -158,55 +172,5 @@ async function toDTO(
     ...plan,
     warmupReviewEntries,
     article: { ...plan.article, text: bundle.text }
-  };
-}
-
-function selectDueReviewIds(snapshot: LearningStorage, now: Date, limit: number): string[] {
-  return Object.values(snapshot.words)
-    .filter((progress) => progress.nextReviewAt && new Date(progress.nextReviewAt) <= now)
-    .sort((left, right) => {
-      const leftTime = new Date(left.nextReviewAt ?? 0).getTime();
-      const rightTime = new Date(right.nextReviewAt ?? 0).getTime();
-      return leftTime - rightTime || right.lapses - left.lapses || left.wordId.localeCompare(right.wordId);
-    })
-    .slice(0, limit)
-    .map((progress) => progress.wordId);
-}
-
-function selectRapidScan(
-  vocabulary: ProductionVocabularyEntry[],
-  snapshot: LearningStorage,
-  readingWordIds: string[],
-  limit: number,
-  now: Date
-): ProductionVocabularyEntry[] {
-  const dueIds = new Set(selectDueReviewIds(snapshot, now, Number.POSITIVE_INFINITY));
-  const readingIds = new Set(readingWordIds);
-  const deduped = [...new Map(vocabulary.map((entry) => [entry.lemma.toLowerCase(), entry])).values()]
-    .filter((entry) => !dueIds.has(entry.id));
-  const readingLimit = Math.floor(limit * 0.2);
-  const reading = deduped
-    .filter((entry) => readingIds.has(entry.id))
-    .sort(compareVocabulary)
-    .slice(0, readingLimit);
-  const selectedIds = new Set(reading.map((entry) => entry.id));
-  const general = deduped
-    .filter((entry) => !selectedIds.has(entry.id))
-    .sort(compareVocabulary)
-    .slice(0, limit - reading.length);
-  return [...reading, ...general];
-}
-
-function compareVocabulary(left: ProductionVocabularyEntry, right: ProductionVocabularyEntry): number {
-  return right.learningValueScore - left.learningValueScore || left.frequencyRank - right.frequencyRank || left.id.localeCompare(right.id);
-}
-
-function inferredAvailability(candidateCount: number): ReadingAvailability {
-  return {
-    subscriptionCount: candidateCount > 0 ? 1 : 0,
-    freshArticleCount: candidateCount,
-    extractedArticleCount: candidateCount,
-    analyzedArticleCount: candidateCount,
-    eligibleArticleCount: candidateCount
   };
 }

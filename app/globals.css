@@ -24,6 +24,10 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+@media (max-width: 767px) {
+  body { padding-bottom: calc(3.5rem + env(safe-area-inset-bottom)); }
+}
+
 ::selection { background: #c7d2fe; color: #312e81; }
 
 .page-shell { width: min(1180px, calc(100% - 32px)); margin-inline: auto; }

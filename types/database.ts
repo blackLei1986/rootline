@@ -94,9 +94,22 @@ export interface Database {
         plan_id: string;
         status: "active" | "complete";
         current_stage: string;
+        current_block: number;
+        event_revision: number;
         actual_seconds: number;
         outcomes: Json;
         started_at: string;
+        completed_at: string | null;
+      }>;
+      today_target_progress: TableDefinition<UserOwnedRow & {
+        id: string;
+        plan_id: string;
+        target_id: string;
+        block: number;
+        status: "not-started" | "active" | "complete";
+        current_activity: "recognition" | "learning-card" | "association" | "cloze" | "recall" | null;
+        recognition_state: "known" | "fuzzy" | "unknown" | null;
+        outcomes: Json;
         completed_at: string | null;
       }>;
       reading_documents: TableDefinition<UserOwnedRow & {

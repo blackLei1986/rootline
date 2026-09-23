@@ -14,41 +14,48 @@ describe("Today service", () => {
     ]);
 
     expect(first.id).toBe(second.id);
-    expect(first.article?.articleId).toBe("article-1");
-    expect(second.article?.articleId).toBe(first.article?.articleId);
-    expect(first.contextQuestions).toHaveLength(5);
-    expect(first.warmupReviewIds).toHaveLength(15);
-    expect(first.rapidScanEntries).toHaveLength(30);
-    expect(first.focusedLearningTarget).toBe(7);
+    expect(first.article).toBeNull();
+    expect(second.article).toBeNull();
+    expect(first.dailyTargets).toHaveLength(30);
+    expect(first.dailyTargets?.map((target) => target.wordId)).toEqual(second.dailyTargets?.map((target) => target.wordId));
+    expect(first.dailyTargets?.every((target) => target.source === "support")).toBe(true);
+    expect(first.stages).toEqual(["learn", "summary"]);
+    expect(first.rapidScanEntries).toEqual([]);
   });
 
   it("reopens a started plan with its stored article and questions", async () => {
     const harness = createHarness();
     const first = await harness.service.getOrCreateTodayPlan("user-1", "2026-09-17", new Date("2026-09-17T08:00:00Z"));
-    const storedQuestionIds = first.contextQuestions.map((question) => question.id);
+    const storedTargetIds = first.dailyTargets?.map((target) => target.wordId);
     harness.candidates.reverse();
     harness.article.text = "The source content changed after the plan started.";
 
     const reopened = await harness.service.getOrCreateTodayPlan("user-1", "2026-09-17", new Date("2026-09-17T09:00:00Z"));
 
     expect(reopened.id).toBe(first.id);
-    expect(reopened.article?.articleId).toBe(first.article?.articleId);
-    expect(reopened.contextQuestions.map((question) => question.id)).toEqual(storedQuestionIds);
+    expect(reopened.article).toBeNull();
+    expect(reopened.dailyTargets?.map((target) => target.wordId)).toEqual(storedTargetIds);
   });
 
-  it("regenerates only before the first session event", async () => {
+  it("carries yesterday's unfinished target snapshots before selecting new words", async () => {
     const harness = createHarness();
-    const first = await harness.service.getOrCreateTodayPlan("user-1", "2026-09-17", new Date("2026-09-17T08:00:00Z"));
-    const regenerated = await harness.service.regenerateUnstartedTodayPlan("user-1", "2026-09-17", new Date("2026-09-17T08:05:00Z"));
-    expect(regenerated.version).toBe(2);
-    expect(regenerated.id).not.toBe(first.id);
+    const previous = previousPlan();
+    harness.store.seed(previous, {
+      planId: previous.id, status: "active", currentStage: "learn", completedQuestionIds: [],
+      completedTargetIds: ["yesterday-0", "yesterday-1"], currentBlock: 1, targetProgress: {},
+      completedMiniReviewBlocks: [], finalReviewComplete: false, reviewAccuracy: { correct: 0, total: 0 }
+    });
 
-    harness.store.startedPlanIds.add(regenerated.id);
-    await expect(harness.service.regenerateUnstartedTodayPlan(
-      "user-1",
-      "2026-09-17",
-      new Date("2026-09-17T08:10:00Z")
-    )).rejects.toThrow("started");
+    const today = await harness.service.getOrCreateTodayPlan("user-1", "2026-09-18", new Date("2026-09-18T08:00:00Z"));
+
+    expect(today.dailyTargets).toHaveLength(30);
+    expect(today.dailyTargets?.slice(0, 3).map((target) => target.wordId)).toEqual(["yesterday-2", "yesterday-3", "yesterday-4"]);
+    expect(today.dailyTargets?.slice(0, 3).every((target) => target.source === "carryover")).toBe(true);
+  });
+
+  it("does not expose a same-day plan regeneration method", () => {
+    const harness = createHarness();
+    expect("regenerateUnstartedTodayPlan" in harness.service).toBe(false);
   });
 });
 
@@ -83,8 +90,13 @@ function createHarness() {
 }
 
 class MemoryTodayPlanStore implements TodayPlanStore {
-  readonly startedPlanIds = new Set<string>();
   private readonly plans = new Map<string, TodayPlan[]>();
+  private readonly sessions = new Map<string, import("@/types/today").TodaySessionDTO>();
+
+  seed(plan: TodayPlan, session: import("@/types/today").TodaySessionDTO) {
+    this.plans.set(`user-1:${plan.date}`, [structuredClone(plan)]);
+    this.sessions.set(plan.id, structuredClone(session));
+  }
 
   async getPlan(userId: string, date: string): Promise<TodayPlan | null> {
     return structuredClone(this.plans.get(`${userId}:${date}`)?.at(-1) ?? null);
@@ -102,9 +114,24 @@ class MemoryTodayPlanStore implements TodayPlanStore {
     return structuredClone(plan);
   }
 
-  async hasSessionEvents(_userId: string, planId: string): Promise<boolean> {
-    return this.startedPlanIds.has(planId);
+  async getSession(_userId: string, planId: string) {
+    return structuredClone(this.sessions.get(planId) ?? null);
   }
+}
+
+function previousPlan(): TodayPlan {
+  return {
+    id: "yesterday-plan", date: "2026-09-17", version: 1, status: "active", estimatedMinutes: 20,
+    warmupReviewIds: [], rapidScanEntries: [], focusedLearningTarget: 30, sentenceTarget: 30, quizTarget: 30,
+    readingCandidateIds: [], mix: { review: 0, newVocabulary: 100, reading: 0, sentence: 0 }, article: null,
+    contextQuestions: [], stages: ["learn", "summary"], degradationReason: null,
+    dailyTargets: Array.from({ length: 7 }, (_, index) => ({
+      wordId: `yesterday-${index}`, word: `carry${index}`, lemma: `carry${index}`, coreMeaningZh: "旧词", coreDefinitionEn: "previous",
+      partOfSpeech: ["noun"], example: "Old example.", examples: ["Old example."], source: "support" as const,
+      rootId: null, rootForm: null, rootMeaningEn: [], rootMeaningZh: [], rootExplanation: null, familyId: null, morphology: null,
+      block: Math.floor(index / 10) + 1 as 1 | 2 | 3, position: index
+    }))
+  };
 }
 
 function candidate(articleId: string, score: number): ArticleCandidate {

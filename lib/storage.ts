@@ -208,8 +208,13 @@ export function updateWordProgress(
     ...storage,
     words: { ...storage.words, [wordId]: nextWord }
   });
-  queueSyncPayload("word-state", wordId, nextWord);
+  queueWordStateSync(wordId);
   return next;
+}
+
+export function queueWordStateSync(wordId: string): void {
+  const word = loadProgress().words[wordId];
+  if (word) queueSyncPayload("word-state", wordId, word);
 }
 
 export function getRootProgress(rootId: string): RootProgress {

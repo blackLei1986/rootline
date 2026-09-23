@@ -68,4 +68,21 @@ describe("Today contracts", () => {
       contextQuestions: [{ id: "same" }, { id: "same" }]
     })).toThrow(/question/i);
   });
+
+  it("preserves frozen Daily 30 snapshots and enforces target positioning", () => {
+    const target = {
+      wordId: "inspect", word: "inspect", lemma: "inspect", coreMeaningZh: "检查", coreDefinitionEn: "examine",
+      partOfSpeech: ["verb"], example: "Inspect the report.", examples: ["Inspect the report."], source: "root-core",
+      rootId: "spect", rootForm: "spect", rootMeaningEn: ["look"], rootMeaningZh: ["看"], rootExplanation: "look",
+      familyId: "spect-family", morphology: { segments: [{ kind: "prefix", surfaceForm: "in-" }, { kind: "root", surfaceForm: "spect" }], formationExplanation: "look into" },
+      block: 1, position: 0
+    };
+    const plan = normalizeTodayPlan({ id: "today", date: "2026-09-23", dailyTargets: [target] });
+    expect(plan.stages).toEqual(["learn", "summary"]);
+    expect(plan.dailyTargets?.[0]).toMatchObject({ wordId: "inspect", source: "root-core", morphology: target.morphology });
+    expect(() => normalizeTodayPlan({ id: "today", dailyTargets: [target, { ...target, wordId: "inspect-2", position: 1 }] }))
+      .toThrow(/lemma/i);
+    expect(() => normalizeTodayPlan({ id: "today", dailyTargets: [{ ...target, source: "support" }] }))
+      .toThrow(/support/i);
+  });
 });

@@ -6,6 +6,7 @@ import { ArrowRight, Brain, Check, Eye, Gauge, LoaderCircle, RotateCcw, Trophy, 
 import { ArticleContextQuiz } from "@/components/today/article-context-quiz";
 import { ArticleReadingStage } from "@/components/today/article-reading-stage";
 import { TodaySetup } from "@/components/today/today-setup";
+import { Daily30Flow } from "@/components/today/daily-30-flow";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -181,6 +182,7 @@ export function TodayLearningFlow({ initialPlan, onEvent }: { initialPlan?: Toda
   if (loading) return <div className="page-shell flex min-h-[65vh] items-center justify-center gap-2 text-sm text-[var(--muted-foreground)]"><LoaderCircle className="size-4 animate-spin" />正在从 9000 词中编排今日候选词</div>;
   if (needsLogin) return <div className="page-shell py-20 text-center"><h1 className="text-2xl font-bold">开始学习前请先登录</h1><p className="mt-3 text-sm text-[var(--muted-foreground)]">登录并验证邮箱后，即可开始今日学习。</p><div className="mt-6"><Button asChild size="lg"><Link href="/login?next=/today">去登录 <ArrowRight className="size-4" /></Link></Button></div></div>;
   if (error || !plan) return <div className="page-shell py-20 text-center"><h1 className="text-2xl font-bold">今日计划暂时无法加载</h1><p className="mt-3 text-sm text-rose-700">{error}</p></div>;
+  if (plan.dailyTargets) return <Daily30Flow plan={plan} />;
   if (phase === "setup") return <TodaySetup plan={plan} onStart={start} />;
   if (phase === "summary") return <TodaySummary plan={plan} results={results} focused={focused} quizCorrect={quizCorrect} onRestart={() => { setResults([]); setQuizCorrect(0); setPhase("setup"); }} />;
 

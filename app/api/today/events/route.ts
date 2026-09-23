@@ -11,11 +11,20 @@ import { getE2ETodaySession, recordE2ETodayEvent } from "@/lib/today/e2e-fixture
 const eventSchema = z.object({
   operationId: z.string().min(1).max(300),
   planId: z.uuid(),
-  type: z.enum(["today_started", "stage_completed", "article_opened", "article_completed", "context_answered", "today_completed"]),
+  type: z.enum([
+    "today_started", "stage_completed", "article_opened", "article_completed", "context_answered",
+    "target_recognized", "target_activity_completed", "review_answered", "mini_review_completed", "final_review_completed", "today_completed"
+  ]),
   stage: z.enum(["warmup", "scan", "learn", "reading", "context-quiz", "summary"]),
   occurredAt: z.iso.datetime({ offset: true }),
   questionId: z.string().min(1).optional(),
-  correct: z.boolean().optional()
+  correct: z.boolean().optional(),
+  targetId: z.string().min(1).optional(),
+  block: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
+  recognitionState: z.enum(["known", "fuzzy", "unknown"]).optional(),
+  activity: z.enum(["learning-card", "association", "cloze", "recall"]).optional(),
+  reviewKind: z.enum(["mini", "final"]).optional(),
+  expectedRevision: z.number().int().nonnegative().optional()
 });
 
 export async function GET(request: Request) {
