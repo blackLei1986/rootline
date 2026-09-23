@@ -100,4 +100,33 @@ describe("simulateDaily30", () => {
     expect(report.days[0]?.qualityWarnings).toEqual(["insufficient-root-capacity"]);
     expect(report.days[0]?.shortfallCauses).toEqual({ "root-capacity-exhaustion": 10 });
   });
+
+  it("preserves scarce viable roots for a later day when scarcity-aware scheduling can fill more slots", () => {
+    const scarcityFixture = ["act", "aud"].flatMap((rootKey) => (
+      Array.from({ length: 15 }, (_, index) => candidate(rootKey, index + 1))
+    )).concat(["bio", "chron"].flatMap((rootKey) => (
+      Array.from({ length: 10 }, (_, index) => candidate(rootKey, index + 1))
+    )));
+    const balanced = simulateDaily30({ days: 2, candidates: scarcityFixture, strategy: "balanced" });
+    const scarcityAware = simulateDaily30({ days: 2, candidates: scarcityFixture, strategy: "scarcity-aware" });
+
+    expect(scarcityAware).toEqual(simulateDaily30({ days: 2, candidates: scarcityFixture, strategy: "scarcity-aware" }));
+    expect(scarcityAware.summary.filledSlots).toBeGreaterThan(balanced.summary.filledSlots);
+    expect(scarcityAware.days.every((day) => day.rootClusters.length >= 2 && day.rootClusters.length <= 4)).toBe(true);
+    expect(new Set(scarcityAware.days.flatMap((day) => day.selectedWords.map((word) => word.catalogWordId))).size).toBe(scarcityAware.summary.filledSlots);
+  });
+
+  it("falls back to balanced allocation when the scarcity heuristic would reduce valid horizon capacity", () => {
+    const diverse = ["act", "aud"].flatMap((rootKey) => (
+      Array.from({ length: 15 }, (_, index) => candidate(rootKey, index + 1))
+    ));
+    const familyLimited = ["bio", "chron"].flatMap((rootKey) => (
+      Array.from({ length: 15 }, (_, index) => candidate(rootKey, index + 1, `${rootKey}:family-${Math.floor(index / 3)}`))
+    ));
+    const balanced = simulateDaily30({ days: 2, candidates: [...diverse, ...familyLimited], strategy: "balanced" });
+    const scarcityAware = simulateDaily30({ days: 2, candidates: [...diverse, ...familyLimited], strategy: "scarcity-aware" });
+
+    expect(scarcityAware.summary.filledSlots).toBe(balanced.summary.filledSlots);
+    expect(scarcityAware.allocationStrategy).toBe("balanced-fallback");
+  });
 });

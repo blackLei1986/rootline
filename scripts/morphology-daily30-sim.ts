@@ -14,8 +14,10 @@ import type { ProductionVocabularyEntry } from "@/types/vocabulary";
 async function main(): Promise<void> {
   const datasetArgument = process.argv.find((argument) => argument.startsWith("--dataset="));
   const daysArgument = process.argv.find((argument) => argument.startsWith("--days="));
+  const strategyArgument = process.argv.find((argument) => argument.startsWith("--strategy="));
   const datasetVersion = z.string().trim().min(1).parse(datasetArgument?.slice("--dataset=".length));
   const days = z.coerce.number().int().positive().parse(daysArgument?.slice("--days=".length) ?? "14");
+  const strategy = z.enum(["balanced", "scarcity-aware"]).parse(strategyArgument?.slice("--strategy=".length) ?? "balanced");
   loadMissingLocalEnvironment();
   const environment = z.object({ NEXT_PUBLIC_SUPABASE_URL: z.url(), SUPABASE_SERVICE_ROLE_KEY: z.string().trim().min(1) }).parse(process.env);
   const vocabulary = JSON.parse(await readFile(resolve(process.cwd(), "data/vocabulary/production-catalog.json"), "utf8")) as ProductionVocabularyEntry[];
@@ -40,7 +42,7 @@ async function main(): Promise<void> {
       rootPedagogicalConfidence: confidenceByRoot.get(rootKey) ?? null
     }));
   });
-  console.log(JSON.stringify(simulateDaily30({ days, candidates }), null, 2));
+  console.log(JSON.stringify(simulateDaily30({ days, candidates, strategy }), null, 2));
 }
 
 function loadMissingLocalEnvironment(): void {

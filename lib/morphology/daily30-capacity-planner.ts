@@ -1,10 +1,11 @@
 import {
   simulateDaily30,
   type Daily30Candidate,
+  type Daily30SchedulingStrategy,
   type Daily30SimulationReport
 } from "@/lib/morphology/daily30-simulator";
 
-export type Daily30PlanningStrategy = "balanced" | "scarcity-aware";
+export type Daily30PlanningStrategy = Daily30SchedulingStrategy;
 
 export interface EffectiveDailyCapacityReport {
   roots: Array<{
@@ -91,8 +92,7 @@ export function estimateMarginalCapacityGain({
   days?: number;
   strategy?: Daily30PlanningStrategy;
 }): MarginalCapacityGain {
-  if (strategy !== "balanced") throw new Error("Scarcity-aware scheduling is not available yet.");
-  const baseline = simulateDaily30({ days, candidates });
+  const baseline = simulateDaily30({ days, candidates, strategy });
   const duplicate = candidates.some((existing) => existing.catalogWordId === candidate.catalogWordId);
   const eligible = candidate.confidence !== "none" && candidate.reviewStatus !== "rejected";
   const rootFamilyKeys = new Set(candidates
@@ -100,7 +100,7 @@ export function estimateMarginalCapacityGain({
     .map((existing) => existing.familyKey));
   const augmented = duplicate || !eligible
     ? baseline
-    : simulateDaily30({ days, candidates: [...candidates, candidate] });
+    : simulateDaily30({ days, candidates: [...candidates, candidate], strategy });
   return {
     candidateId: candidate.catalogWordId,
     rootKey: candidate.rootKey,

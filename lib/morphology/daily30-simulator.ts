@@ -13,6 +13,9 @@ export interface Daily30Candidate {
   rootPedagogicalConfidence: number | null;
 }
 
+export type Daily30SchedulingStrategy = "balanced" | "scarcity-aware";
+export type Daily30AllocationStrategy = Daily30SchedulingStrategy | "balanced-fallback";
+
 export type Daily30ShortfallCause =
   | "eligible-word-exhaustion"
   | "root-capacity-exhaustion"
@@ -24,6 +27,8 @@ type Daily30QualityWarning = "insufficient-root-capacity" | "family-concentratio
 type ShortfallCauses = Partial<Record<Daily30ShortfallCause, number>>;
 
 export interface Daily30SimulationReport {
+  strategy: Daily30SchedulingStrategy;
+  allocationStrategy: Daily30AllocationStrategy;
   days: Array<{
     day: number;
     rootClusters: string[];
@@ -44,11 +49,41 @@ export interface Daily30SimulationReport {
   limitingMetrics: string[];
 }
 
-export function simulateDaily30({ days = 14, candidates }: { days?: number; candidates: readonly Daily30Candidate[] }): Daily30SimulationReport {
+export function simulateDaily30({
+  days = 14,
+  candidates,
+  strategy = "balanced"
+}: {
+  days?: number;
+  candidates: readonly Daily30Candidate[];
+  strategy?: Daily30SchedulingStrategy;
+}): Daily30SimulationReport {
+  const primary = simulateSingleStrategy({ days, candidates, strategy });
+  if (strategy === "balanced") return primary;
+
+  const balanced = simulateSingleStrategy({ days, candidates, strategy: "balanced" });
+  if (primary.summary.filledSlots >= balanced.summary.filledSlots) return primary;
+
+  return {
+    ...balanced,
+    strategy,
+    allocationStrategy: "balanced-fallback"
+  };
+}
+
+function simulateSingleStrategy({
+  days,
+  candidates,
+  strategy
+}: {
+  days: number;
+  candidates: readonly Daily30Candidate[];
+  strategy: Daily30SchedulingStrategy;
+}): Daily30SimulationReport {
   if (!Number.isInteger(days) || days < 1) throw new Error("days must be a positive integer");
   const eligible = candidates.filter((candidate) => candidate.confidence !== "none" && candidate.reviewStatus !== "rejected");
   const selectedIds = new Set<string>();
-  const daily = Array.from({ length: days }, (_, index) => buildDay(index + 1, eligible, selectedIds));
+  const daily = Array.from({ length: days }, (_, index) => buildDay(index + 1, eligible, selectedIds, strategy));
   const filledSlots = daily.reduce((sum, day) => sum + day.filledSlots, 0);
   const distinctRoots = new Set(eligible.map((candidate) => candidate.rootKey)).size;
   const shortfallCauses: ShortfallCauses = {};
@@ -64,6 +99,8 @@ export function simulateDaily30({ days = 14, candidates }: { days?: number; cand
   if (daily.some((day) => day.qualityWarnings.length > 0)) limitingMetrics.push("quality-warnings:present");
   if (distinctRoots < 2) limitingMetrics.push(`distinct-roots:${distinctRoots}<2`);
   return {
+    strategy,
+    allocationStrategy: strategy,
     days: daily,
     summary: { eligibleCandidates: eligible.length, filledSlots, targetSlots: days * 30, distinctRoots, shortfallCauses },
     readiness: limitingMetrics.length === 0 ? "READY_FOR_PHASE_1B" : "NOT_READY_FOR_PHASE_1B",
@@ -71,7 +108,7 @@ export function simulateDaily30({ days = 14, candidates }: { days?: number; cand
   };
 }
 
-function buildDay(day: number, candidates: readonly Daily30Candidate[], selectedIds: Set<string>): Daily30SimulationReport["days"][number] {
+function buildDay(day: number, candidates: readonly Daily30Candidate[], selectedIds: Set<string>, strategy: Daily30SchedulingStrategy): Daily30SimulationReport["days"][number] {
   const remaining = candidates.filter((candidate) => !selectedIds.has(candidate.catalogWordId));
   const byRoot = new Map<string, Daily30Candidate[]>();
   for (const candidate of remaining) {
@@ -90,7 +127,7 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
   const viable = rootGroups.filter((group) => group.familyCount >= 2).sort((left, right) => (
     right.familyCount - left.familyCount || right.words.length - left.words.length || right.pedagogicalConfidence - left.pedagogicalConfidence || left.rootKey.localeCompare(right.rootKey, "en")
   ));
-  const clusters = viable.slice(0, 4);
+  const clusters = strategy === "scarcity-aware" ? chooseScarcityAwareClusters(viable) : viable.slice(0, 4);
   if (clusters.length < 2) {
     const cause: Daily30ShortfallCause = remaining.length === 0
       ? "eligible-word-exhaustion"
@@ -152,6 +189,34 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
       ...(rootCapacityShortfall > 0 ? { "root-capacity-exhaustion": rootCapacityShortfall } : {})
     }
   };
+}
+
+function chooseScarcityAwareClusters(groups: ReadonlyArray<{ rootKey: string; words: Daily30Candidate[]; familyCount: number; pedagogicalConfidence: number }>): Array<{ rootKey: string; words: Daily30Candidate[]; familyCount: number; pedagogicalConfidence: number }> {
+  const ordered = [...groups].sort((left, right) => (
+    effectiveGroupCapacity(right) - effectiveGroupCapacity(left)
+    || right.familyCount - left.familyCount
+    || right.words.length - left.words.length
+    || right.pedagogicalConfidence - left.pedagogicalConfidence
+    || left.rootKey.localeCompare(right.rootKey, "en")
+  ));
+  const clusters: typeof ordered = [];
+  let capacity = 0;
+  for (const group of ordered) {
+    if (clusters.length === 4) break;
+    clusters.push(group);
+    capacity += effectiveGroupCapacity(group);
+    if (clusters.length >= 2 && capacity >= 30) break;
+  }
+  return clusters;
+}
+
+function effectiveGroupCapacity(group: { words: readonly Daily30Candidate[] }): number {
+  const perFamily = new Map<string, number>();
+  for (const word of group.words) {
+    const key = word.familyKey ?? `ungrouped:${word.rootKey}:${word.catalogWordId}`;
+    perFamily.set(key, (perFamily.get(key) ?? 0) + 1);
+  }
+  return Math.min(15, [...perFamily.values()].reduce((sum, count) => sum + Math.min(2, count), 0));
 }
 
 function selectionMetrics(selected: readonly Daily30Candidate[]): Pick<Daily30SimulationReport["days"][number], "rootWordCounts" | "familyWordCounts" | "frequencyBandCounts" | "coverageTagCounts" | "concentration"> {
