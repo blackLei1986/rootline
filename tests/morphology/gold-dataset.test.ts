@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   createGoldDatasetV1,
-  createGoldDatasetV2
+  createGoldDatasetV2,
+  createGoldDatasetV3
 } from "@/lib/morphology/gold-dataset";
 
 describe("createGoldDatasetV1", () => {
@@ -47,5 +48,18 @@ describe("createGoldDatasetV1", () => {
       .toContainEqual(expect.objectContaining({ form: "cept", relation: "historical" }));
     expect(v2.words.find((word) => word.wordId === "v2:action")?.lexicalFamily?.key)
       .toBe("act:action");
+  });
+
+  it("keeps v2 immutable while v3 adds unique explicitly-provenanced depth", () => {
+    const v2 = createGoldDatasetV2();
+    const v3 = createGoldDatasetV3();
+    expect(v3.version).toBe("gold-v3");
+    expect(v3.roots.length).toBeGreaterThan(v2.roots.length);
+    expect(v3.words.length).toBeGreaterThan(v2.words.length + 100);
+    expect(new Set(v3.words.map((word) => word.wordId)).size).toBe(v3.words.length);
+    expect(v3.words.filter((word) => word.wordId.startsWith("v3:")).every((word) => (
+      word.lexicalFamily?.key.startsWith(`${word.rootIds[0]}:`)
+      && word.provenance?.[0]?.sourceUrl.startsWith("https://")
+    ))).toBe(true);
   });
 });

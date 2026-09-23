@@ -21,7 +21,7 @@ describe("parseMorphologyImportArgs", () => {
   it("rejects ambiguous modes and unsupported source versions", () => {
     expect(() => parseMorphologyImportArgs([])).toThrow("exactly one");
     expect(() => parseMorphologyImportArgs(["--dry-run", "--apply"])).toThrow("exactly one");
-    expect(() => parseMorphologyImportArgs(["--dry-run", "--version=gold-v3"]))
+    expect(() => parseMorphologyImportArgs(["--dry-run", "--version=gold-v4"]))
       .toThrow("Unsupported Gold Dataset version");
   });
 });

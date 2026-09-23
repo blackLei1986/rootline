@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const inputSchema = z.object({
   mode: z.enum(["dry-run", "apply"]),
-  datasetVersion: z.enum(["gold-v1", "gold-v2"])
+  datasetVersion: z.enum(["gold-v1", "gold-v2", "gold-v3"])
 });
 
 export type MorphologyImportCliArgs = z.infer<typeof inputSchema>;
