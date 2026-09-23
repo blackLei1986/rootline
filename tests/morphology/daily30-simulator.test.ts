@@ -33,7 +33,8 @@ describe("simulateDaily30", () => {
     expect(first.days[0]).toMatchObject({
       frequencyBandCounts: { high: 30 },
       coverageTagCounts: { general: 30, ielts: 30 },
-      concentration: { maxWordsPerRoot: 15, maxWordsPerFamily: 1 }
+      rootWordCounts: { act: 8, aud: 8, bio: 7, chron: 7 },
+      concentration: { maxWordsPerRoot: 8, maxWordsPerFamily: 1 }
     });
     expect(Object.values(first.days[0]?.familyWordCounts ?? {})).toHaveLength(30);
   });

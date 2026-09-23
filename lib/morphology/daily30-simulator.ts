@@ -106,14 +106,26 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
   }
   const selected: Daily30Candidate[] = [];
   const perFamily = new Map<string, number>();
-  for (const group of clusters) {
-    for (const word of group.words) {
+  const nextIndexByRoot = new Map(clusters.map((group) => [group.rootKey, 0]));
+  let selectedOnPass = true;
+  while (selected.length < 30 && selectedOnPass) {
+    selectedOnPass = false;
+    for (const group of clusters) {
       if (selected.length >= 30) break;
-      const key = `${group.rootKey}:${word.familyKey ?? word.catalogWordId}`;
-      if ((perFamily.get(key) ?? 0) >= 2) continue;
-      selected.push(word);
-      selectedIds.add(word.catalogWordId);
-      perFamily.set(key, (perFamily.get(key) ?? 0) + 1);
+      let index = nextIndexByRoot.get(group.rootKey) ?? 0;
+      while (index < group.words.length) {
+        const word = group.words[index];
+        index += 1;
+        nextIndexByRoot.set(group.rootKey, index);
+        if (!word) continue;
+        const key = `${group.rootKey}:${word.familyKey ?? word.catalogWordId}`;
+        if ((perFamily.get(key) ?? 0) >= 2) continue;
+        selected.push(word);
+        selectedIds.add(word.catalogWordId);
+        perFamily.set(key, (perFamily.get(key) ?? 0) + 1);
+        selectedOnPass = true;
+        break;
+      }
     }
   }
   const shortfall = 30 - selected.length;
