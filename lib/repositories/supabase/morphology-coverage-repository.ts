@@ -65,6 +65,7 @@ export class SupabaseMorphologyCoverageRepository {
           .from("word_morphology_records")
           .select("catalog_word_id,confidence,review_status,source,provenance,family_id,word_morphology_segments(root_id)")
           .eq("dataset_id", datasetId)
+          .order("id")
           .range(from, to);
         throwRepositoryError(result.error, "load persisted morphology records");
         return (result.data ?? []) as unknown as RawCoverageData["records"];

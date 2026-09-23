@@ -142,34 +142,8 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
     } else warnings.push("insufficient-root-capacity");
     return { day, rootClusters: [], selectedWords: [], ...selectionMetrics([]), filledSlots: 0, shortfall: 30, noneConfidenceFallbackCount: 0, qualityWarnings: warnings, shortfallCauses: { [cause]: 30 } };
   }
-  const selected: Daily30Candidate[] = [];
-  const perFamily = new Map<string, number>();
-  const nextIndexByRoot = new Map(clusters.map((group) => [group.rootKey, 0]));
-  let familyCapExcludedCandidates = 0;
-  let selectedOnPass = true;
-  while (selected.length < 30 && selectedOnPass) {
-    selectedOnPass = false;
-    for (const group of clusters) {
-      if (selected.length >= 30) break;
-      let index = nextIndexByRoot.get(group.rootKey) ?? 0;
-      while (index < group.words.length) {
-        const word = group.words[index];
-        index += 1;
-        nextIndexByRoot.set(group.rootKey, index);
-        if (!word) continue;
-        const key = `${group.rootKey}:${word.familyKey ?? word.catalogWordId}`;
-        if ((perFamily.get(key) ?? 0) >= 2) {
-          familyCapExcludedCandidates += 1;
-          continue;
-        }
-        selected.push(word);
-        selectedIds.add(word.catalogWordId);
-        perFamily.set(key, (perFamily.get(key) ?? 0) + 1);
-        selectedOnPass = true;
-        break;
-      }
-    }
-  }
+  const { selected, familyCapExcludedCandidates } = selectFromClusters(clusters);
+  for (const word of selected) selectedIds.add(word.catalogWordId);
   const shortfall = 30 - selected.length;
   const familyConcentrationShortfall = Math.min(shortfall, familyCapExcludedCandidates);
   const rootCapacityShortfall = shortfall - familyConcentrationShortfall;
@@ -191,7 +165,9 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
   };
 }
 
-function chooseScarcityAwareClusters(groups: ReadonlyArray<{ rootKey: string; words: Daily30Candidate[]; familyCount: number; pedagogicalConfidence: number }>): Array<{ rootKey: string; words: Daily30Candidate[]; familyCount: number; pedagogicalConfidence: number }> {
+type RootGroup = { rootKey: string; words: Daily30Candidate[]; familyCount: number; pedagogicalConfidence: number };
+
+function chooseScarcityAwareClusters(groups: ReadonlyArray<RootGroup>): RootGroup[] {
   const ordered = [...groups].sort((left, right) => (
     effectiveGroupCapacity(right) - effectiveGroupCapacity(left)
     || right.familyCount - left.familyCount
@@ -199,15 +175,98 @@ function chooseScarcityAwareClusters(groups: ReadonlyArray<{ rootKey: string; wo
     || right.pedagogicalConfidence - left.pedagogicalConfidence
     || left.rootKey.localeCompare(right.rootKey, "en")
   ));
-  const clusters: typeof ordered = [];
-  let capacity = 0;
-  for (const group of ordered) {
-    if (clusters.length === 4) break;
-    clusters.push(group);
-    capacity += effectiveGroupCapacity(group);
-    if (clusters.length >= 2 && capacity >= 30) break;
+  const scarce = [...groups].sort((left, right) => (
+    left.words.length - right.words.length
+    || effectiveGroupCapacity(left) - effectiveGroupCapacity(right)
+    || right.familyCount - left.familyCount
+    || left.rootKey.localeCompare(right.rootKey, "en")
+  ));
+  const pool = [...new Map([...ordered.slice(0, 8), ...scarce.slice(0, 8)].map((group) => [group.rootKey, group])).values()];
+  let best: { groups: RootGroup[]; selected: Daily30Candidate[]; strandedGroups: number; remainingFamilyBreadth: number; totalWords: number; rootKeys: string } | null = null;
+  for (let size = 2; size <= Math.min(4, pool.length); size += 1) {
+    forEachCombination(pool, size, (clusters) => {
+      const { selected } = selectFromClusters(clusters);
+      const selectedIds = new Set(selected.map((word) => word.catalogWordId));
+      const strandedGroups = clusters.filter((group) => {
+        const remaining = group.words.filter((word) => !selectedIds.has(word.catalogWordId)).length;
+        return remaining > 0 && remaining < 5;
+      }).length;
+      const remainingFamilyBreadth = clusters.reduce((sum, group) => sum + new Set(
+        group.words
+          .filter((word) => !selectedIds.has(word.catalogWordId))
+          .map((word) => word.familyKey ?? `ungrouped:${word.catalogWordId}`)
+      ).size, 0);
+      const candidate = {
+        groups: clusters,
+        selected,
+        strandedGroups,
+        remainingFamilyBreadth,
+        totalWords: clusters.reduce((sum, group) => sum + group.words.length, 0),
+        rootKeys: clusters.map((group) => group.rootKey).sort((left, right) => left.localeCompare(right, "en")).join(",")
+      };
+      if (!best || compareClusterPlans(candidate, best) < 0) best = candidate;
+    });
   }
-  return clusters;
+  const chosen = best as { groups: RootGroup[] } | null;
+  return chosen?.groups ?? ordered.slice(0, 4);
+}
+
+function compareClusterPlans(
+  left: { selected: Daily30Candidate[]; strandedGroups: number; remainingFamilyBreadth: number; totalWords: number; rootKeys: string },
+  right: { selected: Daily30Candidate[]; strandedGroups: number; remainingFamilyBreadth: number; totalWords: number; rootKeys: string }
+): number {
+  return right.selected.length - left.selected.length
+    || left.strandedGroups - right.strandedGroups
+    || right.remainingFamilyBreadth - left.remainingFamilyBreadth
+    || left.totalWords - right.totalWords
+    || left.rootKeys.localeCompare(right.rootKeys, "en");
+}
+
+function forEachCombination<T>(items: readonly T[], size: number, visit: (combination: T[]) => void): void {
+  const visitFrom = (start: number, combination: T[]): void => {
+    if (combination.length === size) {
+      visit(combination);
+      return;
+    }
+    for (let index = start; index <= items.length - (size - combination.length); index += 1) {
+      const item = items[index];
+      if (item) visitFrom(index + 1, [...combination, item]);
+    }
+  };
+  visitFrom(0, []);
+}
+
+function selectFromClusters(clusters: readonly RootGroup[]): { selected: Daily30Candidate[]; familyCapExcludedCandidates: number } {
+  const selected: Daily30Candidate[] = [];
+  const selectedIds = new Set<string>();
+  const perFamily = new Map<string, number>();
+  const nextIndexByRoot = new Map(clusters.map((group) => [group.rootKey, 0]));
+  let familyCapExcludedCandidates = 0;
+  let selectedOnPass = true;
+  while (selected.length < 30 && selectedOnPass) {
+    selectedOnPass = false;
+    for (const group of clusters) {
+      if (selected.length >= 30) break;
+      let index = nextIndexByRoot.get(group.rootKey) ?? 0;
+      while (index < group.words.length) {
+        const word = group.words[index];
+        index += 1;
+        nextIndexByRoot.set(group.rootKey, index);
+        if (!word || selectedIds.has(word.catalogWordId)) continue;
+        const key = `${group.rootKey}:${word.familyKey ?? word.catalogWordId}`;
+        if ((perFamily.get(key) ?? 0) >= 2) {
+          familyCapExcludedCandidates += 1;
+          continue;
+        }
+        selected.push(word);
+        selectedIds.add(word.catalogWordId);
+        perFamily.set(key, (perFamily.get(key) ?? 0) + 1);
+        selectedOnPass = true;
+        break;
+      }
+    }
+  }
+  return { selected, familyCapExcludedCandidates };
 }
 
 function effectiveGroupCapacity(group: { words: readonly Daily30Candidate[] }): number {

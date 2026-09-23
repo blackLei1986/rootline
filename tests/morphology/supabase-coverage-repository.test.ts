@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { collectPagedRecords, mapPersistedCoverageData } from "@/lib/repositories/supabase/morphology-coverage-repository";
+import { collectPagedRecords, mapPersistedCoverageData, SupabaseMorphologyCoverageRepository } from "@/lib/repositories/supabase/morphology-coverage-repository";
 
 describe("mapPersistedCoverageData", () => {
   it("collects every page rather than silently truncating a dataset at the provider row limit", async () => {
@@ -14,6 +14,51 @@ describe("mapPersistedCoverageData", () => {
 
     expect(actual).toHaveLength(1_001);
     expect(calls).toEqual([0, 1_000]);
+  });
+
+  it("orders persisted records by their stable primary key before paging", async () => {
+    const records = Array.from({ length: 1_001 }, (_, index) => ({
+      catalog_word_id: `word-${index}`,
+      confidence: "derived",
+      review_status: "pending",
+      source: "gold-dataset-exact-lemma",
+      provenance: {},
+      family_id: null,
+      word_morphology_segments: []
+    }));
+    const orders: Array<{ column: string; options: unknown }> = [];
+    const ranges: Array<[number, number]> = [];
+    const client = {
+      from(table: string) {
+        if (table === "morphology_datasets") {
+          return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: "dataset-id", version: "gold-v4" }, error: null }) }) }) };
+        }
+        if (table === "word_morphology_records") {
+          return {
+            select: () => ({
+              eq: () => ({
+                order: (column: string, options: unknown) => {
+                  orders.push({ column, options });
+                  return {
+                    range: async (from: number, to: number) => {
+                      ranges.push([from, to]);
+                      return { data: records.slice(from, to + 1), error: null };
+                    }
+                  };
+                }
+              })
+            })
+          };
+        }
+        return { select: () => ({ eq: async () => ({ data: [], error: null }) }) };
+      }
+    };
+
+    const actual = await new SupabaseMorphologyCoverageRepository(client as never).load("gold-v4");
+
+    expect(actual.records).toHaveLength(1_001);
+    expect(orders).toEqual([{ column: "id", options: undefined }, { column: "id", options: undefined }]);
+    expect(ranges).toEqual([[0, 999], [1_000, 1_999]]);
   });
 
   it("reconstructs morphology roots and families from persisted foreign keys", () => {

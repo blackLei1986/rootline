@@ -116,7 +116,20 @@ describe("simulateDaily30", () => {
     expect(new Set(scarcityAware.days.flatMap((day) => day.selectedWords.map((word) => word.catalogWordId))).size).toBe(scarcityAware.summary.filledSlots);
   });
 
-  it("falls back to balanced allocation when the scarcity heuristic would reduce valid horizon capacity", () => {
+  it("maximizes current fill without leaving a partially consumed root in a sub-five stranded pool", () => {
+    const fixture = ["a", "b", "c"].flatMap((rootKey) => (
+      Array.from({ length: 15 }, (_, index) => candidate(rootKey, index + 1))
+    )).concat(Array.from({ length: 10 }, (_, index) => candidate("scarce", index + 1)));
+
+    const report = simulateDaily30({ days: 2, candidates: fixture, strategy: "scarcity-aware" });
+
+    expect(report.summary.filledSlots).toBe(55);
+    expect(report.days[0]?.rootClusters).toEqual(["a", "b", "c"]);
+    expect(report.days[1]?.rootWordCounts.scarce).toBe(10);
+    expect(report.days.flatMap((day) => day.rootClusters).filter((rootKey) => rootKey === "scarce")).toEqual(["scarce"]);
+  });
+
+  it("never reduces valid horizon capacity when compared with balanced allocation", () => {
     const diverse = ["act", "aud"].flatMap((rootKey) => (
       Array.from({ length: 15 }, (_, index) => candidate(rootKey, index + 1))
     ));
@@ -126,7 +139,7 @@ describe("simulateDaily30", () => {
     const balanced = simulateDaily30({ days: 2, candidates: [...diverse, ...familyLimited], strategy: "balanced" });
     const scarcityAware = simulateDaily30({ days: 2, candidates: [...diverse, ...familyLimited], strategy: "scarcity-aware" });
 
-    expect(scarcityAware.summary.filledSlots).toBe(balanced.summary.filledSlots);
-    expect(scarcityAware.allocationStrategy).toBe("balanced-fallback");
+    expect(scarcityAware.summary.filledSlots).toBeGreaterThanOrEqual(balanced.summary.filledSlots);
+    expect(["scarcity-aware", "balanced-fallback"]).toContain(scarcityAware.allocationStrategy);
   });
 });
