@@ -3,7 +3,8 @@ import {
   createGoldDatasetV1,
   createGoldDatasetV2,
   createGoldDatasetV3,
-  createGoldDatasetV4
+  createGoldDatasetV4,
+  createGoldDatasetV5
 } from "@/lib/morphology/gold-dataset";
 
 describe("createGoldDatasetV1", () => {
@@ -74,6 +75,25 @@ describe("createGoldDatasetV1", () => {
       word.rootIds.length === 1
       && word.lexicalFamily?.key.startsWith(`${word.rootIds[0]}:`)
       && word.provenance?.[0]?.sourceUrl.startsWith("https://www.etymonline.com/word/")
+    ))).toBe(true);
+  });
+
+  it("keeps v4 immutable while v5 adds only independently evidenced exact-lemma breadth", () => {
+    const v4 = createGoldDatasetV4();
+    const v5 = createGoldDatasetV5();
+    const additions = v5.words.filter((word) => word.wordId.startsWith("v5:"));
+
+    expect(v5.version).toBe("gold-v5");
+    expect(v5.roots).toEqual(v4.roots);
+    expect(v5.words).toHaveLength(v4.words.length + 5);
+    expect(additions.map((word) => word.lemma).sort()).toEqual([
+      "cessation", "choreograph", "conjecture", "eccentricity", "iconography"
+    ]);
+    expect(additions.every((word) => (
+      word.rootIds.length === 1
+      && word.lexicalFamily?.key.startsWith(`${word.rootIds[0]}:`)
+      && word.provenance?.length
+      && word.provenance.every((source) => source.sourceUrl.startsWith("https://www.etymonline.com/word/"))
     ))).toBe(true);
   });
 });

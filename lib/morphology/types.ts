@@ -1,13 +1,13 @@
 export type MorphologyConfidenceV2 = "verified" | "derived" | "none";
 export type MorphologyReviewStatus = "pending" | "approved" | "rejected";
-export type GoldDatasetVersion = "gold-v1" | "gold-v2" | "gold-v3" | "gold-v4";
+export type GoldDatasetVersion = "gold-v1" | "gold-v2" | "gold-v3" | "gold-v4" | "gold-v5";
 export type EtymologyConfidence = "high" | "medium" | "cautious";
 export type RootVariantRelation = "historical" | "pedagogical";
 
 export interface RootProvenance {
   sourceTitle: string;
   sourceUrl: string;
-  accessedAt: "2026-09-22";
+  accessedAt: "2026-09-22" | "2026-09-23";
   evidenceNote: string;
 }
 
@@ -96,6 +96,7 @@ export type GoldDatasetV1 = GoldDataset & { version: "gold-v1" };
 export type GoldDatasetV2 = GoldDataset & { version: "gold-v2" };
 export type GoldDatasetV3 = GoldDataset & { version: "gold-v3" };
 export type GoldDatasetV4 = GoldDataset & { version: "gold-v4" };
+export type GoldDatasetV5 = GoldDataset & { version: "gold-v5" };
 
 export interface RootExpansionCandidate {
   root: string;

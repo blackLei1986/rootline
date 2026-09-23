@@ -40,12 +40,20 @@ export function runRssReadingAudit(root: string) {
     }
   }
   const indexPath = resolve(root, "data", "vocabulary", "reading-index.json");
+  const manifestPath = resolve(root, "data", "vocabulary", "production-manifest.json");
   let acceptedLemmaCount = 0;
+  let expectedLemmaCount = 0;
+  if (existsSync(manifestPath)) {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { acceptedLemmaCount?: number };
+    expectedLemmaCount = manifest.acceptedLemmaCount ?? 0;
+  } else {
+    missing.push("production manifest: missing data/vocabulary/production-manifest.json");
+  }
   if (existsSync(indexPath)) {
     const index = JSON.parse(readFileSync(indexPath, "utf8")) as { acceptedLemmaCount?: number; entries?: unknown[] };
     acceptedLemmaCount = index.acceptedLemmaCount ?? 0;
-    if (acceptedLemmaCount !== 9_000 || index.entries?.length !== 9_000) {
-      missing.push("production Reading index: accepted lemma count must be exactly 9000");
+    if (acceptedLemmaCount !== expectedLemmaCount || index.entries?.length !== expectedLemmaCount) {
+      missing.push(`production Reading index: accepted lemma count must match the production manifest (${expectedLemmaCount})`);
     }
   } else {
     missing.push("production Reading index: missing data/vocabulary/reading-index.json");

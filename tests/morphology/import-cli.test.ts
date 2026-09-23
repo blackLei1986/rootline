@@ -25,7 +25,9 @@ describe("parseMorphologyImportArgs", () => {
       mode: "dry-run",
       datasetVersion: "gold-v4"
     });
-    expect(() => parseMorphologyImportArgs(["--dry-run", "--version=gold-v5"]))
-      .toThrow("Unsupported Gold Dataset version");
+    expect(parseMorphologyImportArgs(["--dry-run", "--version=gold-v5"])).toEqual({
+      mode: "dry-run",
+      datasetVersion: "gold-v5"
+    });
   });
 });

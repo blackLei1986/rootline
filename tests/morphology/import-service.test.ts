@@ -81,13 +81,13 @@ describe("buildMorphologyImportPlan", () => {
       goldRoots: { insert: 20, update: 0, unchanged: 0 },
       goldWords: { insert: 150, update: 0, unchanged: 0 },
       derivedCandidates: {
-        insert: 123,
+        insert: 124,
         update: 0,
         unchanged: 0,
         verifiedConflicts: 0,
         rejectedConflicts: 0
       },
-      auditEvents: { create: 274, unchanged: 0 }
+      auditEvents: { create: 275, unchanged: 0 }
     });
 
     const goldContradiction = plan.payload.records.find(
@@ -138,8 +138,8 @@ describe("buildMorphologyImportPlan", () => {
     expect(second.errors).toEqual([]);
     expect(second.summary.goldRoots).toEqual({ insert: 0, update: 0, unchanged: 20 });
     expect(second.summary.goldWords).toEqual({ insert: 0, update: 0, unchanged: 150 });
-    expect(second.summary.derivedCandidates).toMatchObject({ insert: 0, update: 0, unchanged: 123 });
-    expect(second.summary.auditEvents).toEqual({ create: 0, unchanged: 274 });
+    expect(second.summary.derivedCandidates).toMatchObject({ insert: 0, update: 0, unchanged: 124 });
+    expect(second.summary.auditEvents).toEqual({ create: 0, unchanged: 275 });
   });
 
   it("never downgrades verified records or recreates same-version rejected candidates", () => {

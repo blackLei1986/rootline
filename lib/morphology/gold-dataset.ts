@@ -8,12 +8,14 @@ import {
 } from "@/data/morphology/gold-v2";
 import { goldV3RootAdditions, goldV3WordAdditions } from "@/data/morphology/gold-v3";
 import { goldV4RootAdditions, goldV4WordAdditions } from "@/data/morphology/gold-v4";
+import { goldV5RootAdditions, goldV5WordAdditions } from "@/data/morphology/gold-v5";
 import type {
   GoldDataset,
   GoldDatasetV1,
   GoldDatasetV2,
   GoldDatasetV3,
   GoldDatasetV4,
+  GoldDatasetV5,
   GoldDatasetVersion,
   GoldRoot,
   GoldRootVariant,
@@ -137,6 +139,25 @@ export function createGoldDatasetV4(): GoldDatasetV4 {
   };
 }
 
+export function createGoldDatasetV5(): GoldDatasetV5 {
+  const v4 = createGoldDatasetV4();
+  const existing = new Set(v4.words.map((word) => word.word));
+  const additions = goldV5WordAdditions.filter((word) => !existing.has(word.word));
+  const rootsProjection = [...v4.roots, ...goldV5RootAdditions];
+  const wordsProjection = [...v4.words, ...additions];
+  return {
+    version: "gold-v5",
+    source: "rootline-curated-static",
+    provenance: {
+      sourcePaths: [...v4.provenance.sourcePaths, "data/morphology/gold-v5.ts"],
+      contentHash: contentHash(rootsProjection, wordsProjection),
+      importedBy: "rootline-morphology-gold-v5-curation"
+    },
+    roots: rootsProjection,
+    words: wordsProjection
+  };
+}
+
 export function createGoldDataset(version: GoldDatasetVersion = "gold-v1"): GoldDataset {
-  return version === "gold-v1" ? createGoldDatasetV1() : version === "gold-v2" ? createGoldDatasetV2() : version === "gold-v3" ? createGoldDatasetV3() : createGoldDatasetV4();
+  return version === "gold-v1" ? createGoldDatasetV1() : version === "gold-v2" ? createGoldDatasetV2() : version === "gold-v3" ? createGoldDatasetV3() : version === "gold-v4" ? createGoldDatasetV4() : createGoldDatasetV5();
 }

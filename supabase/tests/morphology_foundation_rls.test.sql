@@ -49,7 +49,12 @@ values (
 insert into public.morphology_root_variants (dataset_id, canonical_root_id, variant_form, relation, explanation, provenance)
 values (
   (select id from public.morphology_datasets where version = 'test-gold-v1'),
-  (select id from public.morphology_roots where root_key = 'spect'),
+  (
+    select root.id
+    from public.morphology_roots root
+    join public.morphology_datasets dataset on dataset.id = root.dataset_id
+    where root.root_key = 'spect' and dataset.version = 'test-gold-v1'
+  ),
   'specto', 'historical', 'test variant', '{}'::jsonb
 );
 

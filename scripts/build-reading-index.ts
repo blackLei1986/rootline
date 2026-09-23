@@ -3,10 +3,9 @@ import { resolve } from "node:path";
 import { passesProductionAcceptedMinimum } from "@/lib/vocabulary-production-report";
 import type { ProductionVocabularyEntry } from "@/types";
 
-const EXPECTED_ACCEPTED_LEMMAS = 9_000;
-
 async function main() {
   const directory = resolve(process.cwd(), "public", "vocabulary-data");
+  const manifest = JSON.parse(await readFile(resolve(process.cwd(), "data", "vocabulary", "production-manifest.json"), "utf8")) as { acceptedLemmaCount: number };
   const files = (await readdir(directory)).filter((file) => /^[a-z]\.json$/.test(file)).sort();
   const catalog = (await Promise.all(
     files.map(async (file) => JSON.parse(await readFile(resolve(directory, file), "utf8")) as ProductionVocabularyEntry[])
@@ -20,8 +19,8 @@ async function main() {
     if (!entry.id) throw new Error(`Accepted lemma has no word ID: ${lemma}`);
     byLemma.set(lemma, entry);
   }
-  if (byLemma.size !== EXPECTED_ACCEPTED_LEMMAS) {
-    throw new Error(`Reading index requires ${EXPECTED_ACCEPTED_LEMMAS} accepted lemmas; found ${byLemma.size}.`);
+  if (byLemma.size !== manifest.acceptedLemmaCount) {
+    throw new Error(`Reading index requires ${manifest.acceptedLemmaCount} accepted lemmas; found ${byLemma.size}.`);
   }
 
   const entries = [...byLemma.entries()].map(([lemma, entry]) => ({

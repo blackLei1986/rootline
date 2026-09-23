@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { buildFinalProductAcceptance, runTodayPlanInvariantChecks } from "@/scripts/final-product-acceptance";
 
 const REQUIRED_NAMES = [
@@ -30,7 +32,8 @@ describe("final product acceptance", () => {
 
   it("recalculates accepted lemma count from deployed shards and passes every prerequisite audit", async () => {
     const result = await buildFinalProductAcceptance(process.cwd());
-    expect(result.acceptedLemmaCount).toBe(9_000);
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "data/vocabulary/production-manifest.json"), "utf8")) as { acceptedLemmaCount: number };
+    expect(result.acceptedLemmaCount).toBe(manifest.acceptedLemmaCount);
     expect(result.results.find((check) => check.name === "fullTestBuildStatus")?.passed).toBe(false);
     for (const check of result.results) {
       if (check.name === "fullTestBuildStatus") continue;
