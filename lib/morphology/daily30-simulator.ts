@@ -15,6 +15,7 @@ export interface Daily30Candidate {
 
 export type Daily30ShortfallCause =
   | "eligible-word-exhaustion"
+  | "root-capacity-exhaustion"
   | "root-cluster-constraint"
   | "family-concentration"
   | "other-quality-exclusion";
@@ -107,6 +108,7 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
   const selected: Daily30Candidate[] = [];
   const perFamily = new Map<string, number>();
   const nextIndexByRoot = new Map(clusters.map((group) => [group.rootKey, 0]));
+  let skippedForFamilyCap = false;
   let selectedOnPass = true;
   while (selected.length < 30 && selectedOnPass) {
     selectedOnPass = false;
@@ -119,7 +121,10 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
         nextIndexByRoot.set(group.rootKey, index);
         if (!word) continue;
         const key = `${group.rootKey}:${word.familyKey ?? word.catalogWordId}`;
-        if ((perFamily.get(key) ?? 0) >= 2) continue;
+        if ((perFamily.get(key) ?? 0) >= 2) {
+          skippedForFamilyCap = true;
+          continue;
+        }
         selected.push(word);
         selectedIds.add(word.catalogWordId);
         perFamily.set(key, (perFamily.get(key) ?? 0) + 1);
@@ -129,7 +134,13 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
     }
   }
   const shortfall = 30 - selected.length;
-  if (shortfall > 0 && !warnings.includes("family-concentration")) warnings.push("family-concentration");
+  const shortfallCause: Daily30ShortfallCause | null = shortfall === 0
+    ? null
+    : skippedForFamilyCap
+      ? "family-concentration"
+      : "root-capacity-exhaustion";
+  if (shortfallCause === "family-concentration" && !warnings.includes("family-concentration")) warnings.push("family-concentration");
+  if (shortfallCause === "root-capacity-exhaustion") warnings.push("insufficient-root-capacity");
   return {
     day,
     rootClusters: [...new Set(selected.map((word) => word.rootKey))],
@@ -139,7 +150,7 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
     shortfall,
     noneConfidenceFallbackCount: 0,
     qualityWarnings: warnings,
-    shortfallCauses: shortfall > 0 ? { "family-concentration": shortfall } : {}
+    shortfallCauses: shortfallCause ? { [shortfallCause]: shortfall } : {}
   };
 }
 

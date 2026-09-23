@@ -56,8 +56,9 @@ claims.
 ## 14-day Daily 30 simulation
 
 The balanced root-first schedule selected 320 of 420 slots. All selected words
-were unique and non-`none`; all fully filled days used two to four roots; the
-remaining 100 slots were blocked by the per-root lexical-family constraint.
+were unique and non-`none`; all fully filled days used two to four roots. Of
+the remaining 100 slots, 94 were blocked by the per-root lexical-family cap and
+6 by exhausted viable root pools.
 
 Frequency uses `very-high/high/medium/low`; tags use `general/IELTS/TOEFL/academic`.
 
@@ -71,15 +72,16 @@ Frequency uses `very-high/high/medium/low`; tags use `general/IELTS/TOEFL/academ
 | 6 | spect, press, serv, dict | 30 | 26 | 3/8/11/8 | 17/16/23/26 | 8 / 2 | 0 | — |
 | 7 | mit, cur, pend, cess | 30 | 21 | 4/6/15/5 | 19/18/22/26 | 9 / 2 | 0 | — |
 | 8 | tract, vis, loc, gen | 25 | 18 | 2/5/9/9 | 18/14/16/21 | 8 / 2 | 5 | family concentration |
-| 9 | liter, manu, form, cap | 24 | 16 | 0/6/12/6 | 17/12/18/20 | 7 / 2 | 6 | family concentration |
+| 9 | liter, manu, form, cap | 24 | 16 | 0/6/12/6 | 17/12/18/20 | 7 / 2 | 6 | root-capacity exhaustion |
 | 10 | act, equ, log, grad | 23 | 12 | 3/9/11/0 | 17/12/12/17 | 6 / 2 | 7 | family concentration |
 | 11 | aud, graph, dom, bio | 22 | 12 | 0/7/8/7 | 10/14/12/18 | 6 / 2 | 8 | family concentration |
 | 12 | centr, bene, corp, ann | 16 | 11 | 3/4/4/5 | 11/11/11/14 | 4 / 2 | 14 | family concentration |
 | 13 | none viable | 0 | 0 | 0/0/0/0 | 0/0/0/0 | 0 / 0 | 30 | family concentration |
 | 14 | none viable | 0 | 0 | 0/0/0/0 | 0/0/0/0 | 0 / 0 | 30 | family concentration |
 
-Summary: 406 eligible candidates, 320 filled slots, 48 distinct roots, and 100
-shortfall slots attributed to family concentration. Readiness limiting metrics:
+Summary: 406 eligible candidates, 320 filled slots, 48 distinct roots, 94
+shortfall slots attributed to family concentration, and 6 to root-capacity
+exhaustion. Readiness limiting metrics:
 `eligible-usable-words:406<420`, `filled-slots:320<420`,
 `root-clusters:not-2-to-4`, and `quality-warnings:present`.
 
