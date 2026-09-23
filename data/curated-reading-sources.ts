@@ -11,10 +11,10 @@ export interface CuratedReadingSource {
   reviewedAt: string;
 }
 
-// This code-managed identity map is the admission boundary. Starter feeds and
+// This code-managed key/URL map is the admission boundary. Starter feeds and
 // user subscriptions are never implicitly promoted into the curated corpus.
 const reviewedFeedUrls: Readonly<Record<string, string>> = Object.freeze({
-  "nasa-recently-published": "https://www.nasa.gov/feed/"
+  "nasa-recently-published": "https://www.nasa.gov/news-release/feed/"
 });
 
 export function defineCuratedReadingSources(sources: readonly CuratedReadingSource[]): readonly CuratedReadingSource[] {
@@ -47,8 +47,8 @@ export function defineCuratedReadingSources(sources: readonly CuratedReadingSour
 export const curatedReadingSources = defineCuratedReadingSources([
   {
     key: "nasa-recently-published",
-    title: "NASA Recently Published",
-    feedUrl: "https://www.nasa.gov/feed/",
+    title: "NASA News Releases",
+    feedUrl: "https://www.nasa.gov/news-release/feed/",
     siteUrl: "https://www.nasa.gov/",
     attribution: "NASA",
     category: "science",
@@ -60,8 +60,7 @@ export const curatedReadingSources = defineCuratedReadingSources([
 ]);
 
 export function isEligibleCuratedReadingSource(source: CuratedReadingSource): boolean {
-  return curatedReadingSources.includes(source)
-    && source.enabled
+  return source.enabled
     && source.language === "en"
     && reviewedFeedUrls[source.key] === source.feedUrl;
 }
@@ -69,5 +68,18 @@ export function isEligibleCuratedReadingSource(source: CuratedReadingSource): bo
 export const eligibleCuratedReadingSources = Object.freeze(curatedReadingSources.filter(isEligibleCuratedReadingSource));
 
 export function serializeCuratedReadingSources(sources: readonly CuratedReadingSource[]): string {
-  return JSON.stringify([...sources].sort((left, right) => left.key.localeCompare(right.key)));
+  return JSON.stringify([...sources]
+    .sort((left, right) => left.key.localeCompare(right.key))
+    .map((source) => ({
+      key: source.key,
+      title: source.title,
+      feedUrl: source.feedUrl,
+      siteUrl: source.siteUrl,
+      attribution: source.attribution,
+      category: source.category,
+      language: source.language,
+      qualityScore: source.qualityScore,
+      enabled: source.enabled,
+      reviewedAt: source.reviewedAt
+    })));
 }

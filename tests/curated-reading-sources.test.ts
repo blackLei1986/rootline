@@ -11,8 +11,8 @@ import { starterFeeds } from "@/data/starter-feeds";
 
 const nasa: CuratedReadingSource = {
   key: "nasa-recently-published",
-  title: "NASA Recently Published",
-  feedUrl: "https://www.nasa.gov/feed/",
+  title: "NASA News Releases",
+  feedUrl: "https://www.nasa.gov/news-release/feed/",
   siteUrl: "https://www.nasa.gov/",
   attribution: "NASA",
   category: "science",
@@ -39,24 +39,29 @@ describe("curated reading sources", () => {
   });
 
   it("excludes disabled and non-English entries from eligibility", () => {
+    expect(isEligibleCuratedReadingSource({ ...nasa })).toBe(true);
     expect(isEligibleCuratedReadingSource({ ...nasa, enabled: false })).toBe(false);
     expect(isEligibleCuratedReadingSource({ ...nasa, language: "es" })).toBe(false);
   });
 
   it("admits only the reviewed key and exact feed URL", () => {
     expect(isEligibleCuratedReadingSource(curatedReadingSources[0])).toBe(true);
-    expect(isEligibleCuratedReadingSource(nasa)).toBe(false);
+    expect(isEligibleCuratedReadingSource(nasa)).toBe(true);
     expect(isEligibleCuratedReadingSource({ ...nasa, key: "unreviewed" })).toBe(false);
     expect(isEligibleCuratedReadingSource({ ...nasa, feedUrl: "https://example.org/feed" })).toBe(false);
+    expect(isEligibleCuratedReadingSource({ ...nasa, feedUrl: "https://www.nasa.gov/feed/" })).toBe(false);
     expect(eligibleCuratedReadingSources.map(({ key }) => key)).toEqual(["nasa-recently-published"]);
-    expect(starterFeeds.filter(({ feedUrl }) => eligibleCuratedReadingSources.some((source) => source.feedUrl === feedUrl))).toHaveLength(1);
+    expect(starterFeeds.filter(({ feedUrl }) => eligibleCuratedReadingSources.some((source) => source.feedUrl === feedUrl))).toHaveLength(0);
   });
 
   it("serializes the validated registry deterministically regardless of insertion order", () => {
     const other = { ...nasa, key: "unreviewed", feedUrl: "https://example.org/feed", enabled: false };
+    const withExtra = { ...nasa, unreviewedFlag: true };
     const first = defineCuratedReadingSources([other, nasa]);
     const second = defineCuratedReadingSources([nasa, other]);
     expect(serializeCuratedReadingSources(first)).toBe(serializeCuratedReadingSources(second));
     expect(serializeCuratedReadingSources(curatedReadingSources)).toBe(serializeCuratedReadingSources([nasa]));
+    expect(serializeCuratedReadingSources([withExtra]))
+      .toBe(serializeCuratedReadingSources([nasa]));
   });
 });
