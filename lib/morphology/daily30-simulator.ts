@@ -27,6 +27,11 @@ export interface Daily30SimulationReport {
     day: number;
     rootClusters: string[];
     selectedWords: Daily30Candidate[];
+    rootWordCounts: Record<string, number>;
+    familyWordCounts: Record<string, number>;
+    frequencyBandCounts: Partial<Record<FrequencyBand, number>>;
+    coverageTagCounts: Partial<Record<CoverageTag, number>>;
+    concentration: { maxWordsPerRoot: number; maxWordsPerFamily: number };
     filledSlots: number;
     shortfall: number;
     noneConfidenceFallbackCount: 0;
@@ -80,7 +85,7 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
     familyCount: new Set(words.map((word) => word.familyKey ?? `ungrouped:${word.catalogWordId}`)).size,
     pedagogicalConfidence: Math.max(...words.map((word) => word.rootPedagogicalConfidence ?? 0))
   })).filter((group) => group.words.length >= 5);
-  if (rootGroups.some((group) => group.familyCount < 2)) warnings.push("family-concentration");
+  const hasFamilyConcentration = rootGroups.some((group) => group.familyCount < 2);
   const viable = rootGroups.filter((group) => group.familyCount >= 2).sort((left, right) => (
     right.familyCount - left.familyCount || right.words.length - left.words.length || right.pedagogicalConfidence - left.pedagogicalConfidence || left.rootKey.localeCompare(right.rootKey, "en")
   ));
@@ -88,7 +93,7 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
   if (clusters.length < 2) {
     const cause: Daily30ShortfallCause = remaining.length === 0
       ? "eligible-word-exhaustion"
-      : warnings.includes("family-concentration")
+      : hasFamilyConcentration
         ? "family-concentration"
         : rootGroups.length < 2
           ? "root-cluster-constraint"
@@ -97,7 +102,7 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
     else if (cause === "family-concentration") {
       if (!warnings.includes("family-concentration")) warnings.push("family-concentration");
     } else warnings.push("insufficient-root-capacity");
-    return { day, rootClusters: [], selectedWords: [], filledSlots: 0, shortfall: 30, noneConfidenceFallbackCount: 0, qualityWarnings: warnings, shortfallCauses: { [cause]: 30 } };
+    return { day, rootClusters: [], selectedWords: [], ...selectionMetrics([]), filledSlots: 0, shortfall: 30, noneConfidenceFallbackCount: 0, qualityWarnings: warnings, shortfallCauses: { [cause]: 30 } };
   }
   const selected: Daily30Candidate[] = [];
   const perFamily = new Map<string, number>();
@@ -112,16 +117,41 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
     }
   }
   const shortfall = 30 - selected.length;
-  if (shortfall > 0) warnings.push("family-concentration");
+  if (shortfall > 0 && !warnings.includes("family-concentration")) warnings.push("family-concentration");
   return {
     day,
     rootClusters: [...new Set(selected.map((word) => word.rootKey))],
     selectedWords: selected,
+    ...selectionMetrics(selected),
     filledSlots: selected.length,
     shortfall,
     noneConfidenceFallbackCount: 0,
     qualityWarnings: warnings,
     shortfallCauses: shortfall > 0 ? { "family-concentration": shortfall } : {}
+  };
+}
+
+function selectionMetrics(selected: readonly Daily30Candidate[]): Pick<Daily30SimulationReport["days"][number], "rootWordCounts" | "familyWordCounts" | "frequencyBandCounts" | "coverageTagCounts" | "concentration"> {
+  const rootWordCounts: Record<string, number> = {};
+  const familyWordCounts: Record<string, number> = {};
+  const frequencyBandCounts: Partial<Record<FrequencyBand, number>> = {};
+  const coverageTagCounts: Partial<Record<CoverageTag, number>> = {};
+  for (const word of selected) {
+    rootWordCounts[word.rootKey] = (rootWordCounts[word.rootKey] ?? 0) + 1;
+    const familyKey = word.familyKey ?? `ungrouped:${word.rootKey}:${word.catalogWordId}`;
+    familyWordCounts[familyKey] = (familyWordCounts[familyKey] ?? 0) + 1;
+    frequencyBandCounts[word.frequencyBand] = (frequencyBandCounts[word.frequencyBand] ?? 0) + 1;
+    for (const tag of word.coverageTags) coverageTagCounts[tag] = (coverageTagCounts[tag] ?? 0) + 1;
+  }
+  return {
+    rootWordCounts,
+    familyWordCounts,
+    frequencyBandCounts,
+    coverageTagCounts,
+    concentration: {
+      maxWordsPerRoot: Math.max(0, ...Object.values(rootWordCounts)),
+      maxWordsPerFamily: Math.max(0, ...Object.values(familyWordCounts))
+    }
   };
 }
 

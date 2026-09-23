@@ -30,6 +30,12 @@ describe("simulateDaily30", () => {
     expect(first.days.every((day) => day.rootClusters.length >= 2 && day.rootClusters.length <= 4)).toBe(true);
     expect(new Set(first.days.flatMap((day) => day.selectedWords.map((word) => word.catalogWordId))).size)
       .toBe(first.summary.filledSlots);
+    expect(first.days[0]).toMatchObject({
+      frequencyBandCounts: { high: 30 },
+      coverageTagCounts: { general: 30, ielts: 30 },
+      concentration: { maxWordsPerRoot: 15, maxWordsPerFamily: 1 }
+    });
+    expect(Object.values(first.days[0]?.familyWordCounts ?? {})).toHaveLength(30);
   });
 
   it("reports a quality-preserving shortfall instead of using none-confidence or concentrated families", () => {
@@ -58,5 +64,16 @@ describe("simulateDaily30", () => {
 
     expect(report.days[0]?.filledSlots).toBe(0);
     expect(report.summary.shortfallCauses["root-cluster-constraint"]).toBe(30);
+  });
+
+  it("emits a family-concentration warning once even when an unusable root is also present", () => {
+    const oneFamily = Array.from({ length: 15 }, (_, index) => candidate("act", index + 1, "act:one-family"));
+    const report = simulateDaily30({
+      days: 1,
+      candidates: [...oneFamily, ...Array.from({ length: 15 }, (_, index) => candidate("aud", index + 1)), ...Array.from({ length: 5 }, (_, index) => candidate("bio", index + 1))]
+    });
+
+    expect(report.days[0]?.qualityWarnings).toEqual(["family-concentration"]);
+    expect(report.days[0]?.shortfallCauses).toEqual({ "family-concentration": 10 });
   });
 });
