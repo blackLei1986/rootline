@@ -46,6 +46,7 @@ describe("buildPersistedRootExpansionReport", () => {
       ieltsTaggedCount: 2,
       variants: ["ag"]
     });
+    expect(report.roots[0]).toMatchObject({ capacityTier: "C", wordsPerFamily: { "act:action": 3 } });
   });
 
   it("sorts by pedagogical value and never adds a substring-only production word", () => {
@@ -54,5 +55,48 @@ describe("buildPersistedRootExpansionReport", () => {
     expect(report.roots.map((root) => root.rootKey)).toEqual(["act", "aud"]);
     expect(report.roots[0]?.productionExactMatchCount).toBe(3);
     expect(report.roots[0]?.usableProductionWordCount).toBe(3);
+  });
+
+  it("assigns capacity tiers only when word depth is supported by enough lexical families", () => {
+    const reportFor = (wordCount: number, familyCount: number) => buildPersistedRootExpansionReport({
+      datasetVersion: "gold-v3",
+      vocabulary: Array.from({ length: wordCount }, (_, index) => ({
+        id: `word-${index}`,
+        word: `word-${index}`,
+        lemma: `word-${index}`,
+        wordFamilyId: `word-${index}`,
+        surfaceForms: [`word-${index}`],
+        partOfSpeech: ["noun"],
+        coreMeaningZh: "测试",
+        coreDefinitionEn: "test",
+        example: "A test word.",
+        examples: ["A test word."],
+        frequencyBand: "high" as const,
+        frequencyRank: index,
+        learningValueScore: 90,
+        contentTier: "tier-1-core" as const,
+        learningGoal: "recognition" as const,
+        coverageTags: ["general"],
+        pipelineStatus: "accepted" as const,
+        morphologyConfidence: "medium" as const,
+        sourceMetadata: { frequencySources: [], academicSources: [], examSources: [], generatedAt: "2026-09-23", generatedBy: "test", confidence: 100 }
+      })),
+      roots: [{ id: "root-test", rootKey: "test", educationalContent: {}, provenance: {} }],
+      variants: [],
+      records: Array.from({ length: wordCount }, (_, index) => ({
+        catalogWordId: `word-${index}`,
+        confidence: "derived" as const,
+        reviewStatus: "pending" as const,
+        source: "gold-dataset-exact-lemma",
+        familyKey: `test:family-${index % familyCount}`,
+        rootKeys: ["test"],
+        provenance: {}
+      }))
+    }).roots[0]?.capacityTier;
+
+    expect(reportFor(10, 3)).toBe("A");
+    expect(reportFor(6, 2)).toBe("B");
+    expect(reportFor(6, 1)).toBe("C");
+    expect(reportFor(2, 1)).toBe("D");
   });
 });

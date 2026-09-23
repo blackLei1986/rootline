@@ -25,6 +25,8 @@ export interface PersistedRootExpansionReport {
     pedagogicalConfidence: number | null;
     riskNotes: string | null;
     pedagogicalValue: number;
+    capacityTier: "A" | "B" | "C" | "D";
+    wordsPerFamily: Record<string, number>;
   }>;
 }
 
@@ -58,6 +60,10 @@ export function buildPersistedRootExpansionReport({
       usableWords.filter((record) => record.familyKey !== null),
       (record) => record.familyKey ?? ""
     );
+    const wordsPerFamily = Object.fromEntries([...usableWords.reduce((counts, record) => {
+      if (record.familyKey) counts.set(record.familyKey, (counts.get(record.familyKey) ?? 0) + 1);
+      return counts;
+    }, new Map<string, number>()).entries()].sort(([left], [right]) => left.localeCompare(right, "en")));
     const usableVocabulary = usableWords.flatMap((record) => {
       const word = vocabularyById.get(record.catalogWordId);
       return word ? [word] : [];
@@ -85,7 +91,9 @@ export function buildPersistedRootExpansionReport({
       academicTaggedCount: tagCount("academic"),
       variants: [...new Set(variantsByRoot.get(root.rootKey) ?? [])].sort((left, right) => left.localeCompare(right, "en")),
       ...metadata,
-      pedagogicalValue
+      pedagogicalValue,
+      capacityTier: capacityTier(usableWords.length, usableProductionFamilyCount),
+      wordsPerFamily
     };
   }).sort((left, right) => (
     right.pedagogicalValue - left.pedagogicalValue
@@ -103,6 +111,13 @@ export function buildPersistedRootExpansionReport({
     },
     roots: reportRoots
   };
+}
+
+function capacityTier(words: number, families: number): "A" | "B" | "C" | "D" {
+  if (words >= 10 && families >= 3) return "A";
+  if (words >= 6 && families >= 2) return "B";
+  if (words >= 3) return "C";
+  return "D";
 }
 
 function distinctCount(items: readonly PersistedCoverageRecord[], key: (item: PersistedCoverageRecord) => string): number {
