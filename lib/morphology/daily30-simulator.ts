@@ -108,7 +108,7 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
   const selected: Daily30Candidate[] = [];
   const perFamily = new Map<string, number>();
   const nextIndexByRoot = new Map(clusters.map((group) => [group.rootKey, 0]));
-  let skippedForFamilyCap = false;
+  let familyCapExcludedCandidates = 0;
   let selectedOnPass = true;
   while (selected.length < 30 && selectedOnPass) {
     selectedOnPass = false;
@@ -122,7 +122,7 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
         if (!word) continue;
         const key = `${group.rootKey}:${word.familyKey ?? word.catalogWordId}`;
         if ((perFamily.get(key) ?? 0) >= 2) {
-          skippedForFamilyCap = true;
+          familyCapExcludedCandidates += 1;
           continue;
         }
         selected.push(word);
@@ -134,13 +134,10 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
     }
   }
   const shortfall = 30 - selected.length;
-  const shortfallCause: Daily30ShortfallCause | null = shortfall === 0
-    ? null
-    : skippedForFamilyCap
-      ? "family-concentration"
-      : "root-capacity-exhaustion";
-  if (shortfallCause === "family-concentration" && !warnings.includes("family-concentration")) warnings.push("family-concentration");
-  if (shortfallCause === "root-capacity-exhaustion") warnings.push("insufficient-root-capacity");
+  const familyConcentrationShortfall = Math.min(shortfall, familyCapExcludedCandidates);
+  const rootCapacityShortfall = shortfall - familyConcentrationShortfall;
+  if (familyConcentrationShortfall > 0 && !warnings.includes("family-concentration")) warnings.push("family-concentration");
+  if (rootCapacityShortfall > 0) warnings.push("insufficient-root-capacity");
   return {
     day,
     rootClusters: [...new Set(selected.map((word) => word.rootKey))],
@@ -150,7 +147,10 @@ function buildDay(day: number, candidates: readonly Daily30Candidate[], selected
     shortfall,
     noneConfidenceFallbackCount: 0,
     qualityWarnings: warnings,
-    shortfallCauses: shortfallCause ? { [shortfallCause]: shortfall } : {}
+    shortfallCauses: {
+      ...(familyConcentrationShortfall > 0 ? { "family-concentration": familyConcentrationShortfall } : {}),
+      ...(rootCapacityShortfall > 0 ? { "root-capacity-exhaustion": rootCapacityShortfall } : {})
+    }
   };
 }
 

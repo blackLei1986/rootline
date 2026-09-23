@@ -78,6 +78,18 @@ describe("simulateDaily30", () => {
     expect(report.days[0]?.shortfallCauses).toEqual({ "root-capacity-exhaustion": 20 });
   });
 
+  it("splits mixed shortfalls between family-cap exclusions and exhausted root pools", () => {
+    const cappedFamily = Array.from({ length: 3 }, (_, index) => candidate("act", index + 1, "act:one-family"));
+    const otherActFamilies = Array.from({ length: 4 }, (_, index) => candidate("act", index + 4));
+    const report = simulateDaily30({
+      days: 1,
+      candidates: [...cappedFamily, ...otherActFamilies, ...Array.from({ length: 5 }, (_, index) => candidate("aud", index + 1))]
+    });
+
+    expect(report.days[0]?.filledSlots).toBe(11);
+    expect(report.days[0]?.shortfallCauses).toEqual({ "family-concentration": 1, "root-capacity-exhaustion": 18 });
+  });
+
   it("does not mislabel root-pool exhaustion as family concentration when an unusable root is present", () => {
     const oneFamily = Array.from({ length: 15 }, (_, index) => candidate("act", index + 1, "act:one-family"));
     const report = simulateDaily30({
