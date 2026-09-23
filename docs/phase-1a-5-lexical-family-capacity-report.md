@@ -15,6 +15,14 @@
 
 V4 keeps v3 immutable. It adds five exact production lemmas with explicit Etymonline provenance and lexical-family keys. All retained candidates have positive 14-day scarcity-aware marginal gain: one at +1 and four at +5 slots. Candidate sets that measured zero or negative gain under the final scheduler were excluded before the final import.
 
+| Catalog ID | Root / family | Evidence and pedagogical reason | 14-day baseline → augmented | Gain |
+| --- | --- | --- | ---: | ---: |
+| `geographic` | `graph:geographic` | [geographic](https://www.etymonline.com/word/geographic) traces the word to Greek *geographikos*; it creates a separate writing/description family. | 360 → 361 | +1 |
+| `microscopic` | `micro:microscopic` | [microscopic](https://www.etymonline.com/word/microscopic) supplies the small-scale scientific family needed to make `micro` a viable root pool. | 356 → 361 | +5 |
+| `microbial` | `micro:microbial` | [microbial](https://www.etymonline.com/word/microbial) supplies the distinct life-science family needed to make `micro` viable. | 356 → 361 | +5 |
+| `phonological` | `phon:phonological` | [phonological](https://www.etymonline.com/word/phonological) traces to Greek *phone*; it provides a distinct sound-system family. | 356 → 361 | +5 |
+| `headphone` | `phon:headphone` | [headphone](https://www.etymonline.com/word/headphone) derives its phone element from [telephone](https://www.etymonline.com/word/telephone), whose history traces it to Greek *phone*; it provides the second viable `phon` family. | 356 → 361 | +5 |
+
 ## Local import and persistence
 
 After a local database reset, all 61 pgTAP tests passed. The v4 dry run had zero errors. First local apply wrote 999 records and 1,003 audit events; the identical second apply reported zero inserted/updated records and zero created audit events.
