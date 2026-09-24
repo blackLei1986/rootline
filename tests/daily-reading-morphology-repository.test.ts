@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { SupabaseDailyReadingMorphologyRepository } from "@/lib/repositories/supabase/daily-reading-morphology-repository";
 import type { ProductionVocabularyEntry } from "@/types/vocabulary";
 

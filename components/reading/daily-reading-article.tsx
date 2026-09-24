@@ -44,11 +44,10 @@ export function DailyReadingArticle({ article, words, initialState }: { article:
   }, [article.articleId]);
   useEffect(() => {
     if (!initialState) return;
-    setReadState(initialState);
     if (initialState.openedAt || initialState.completedAt || openRequestSent.current === article.articleId) return;
     openRequestSent.current = article.articleId;
     void saveState({ opened: true });
-  }, [article.articleId, initialState?.openedAt, initialState?.completedAt, saveState]);
+  }, [article.articleId, initialState, saveState]);
 
   const recentIds = article.matchedRecent7DayWordIds ?? article.matchedRecentWordIds;
   const recentLevel: HighlightLevel = article.matchedRecent7DayWordIds === undefined ? "recent-legacy" : "recent-7-day";

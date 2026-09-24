@@ -21,7 +21,8 @@ const checks: AuditCheck[] = [
   { file: "lib/jobs/feed-refresh.ts", pattern: /etag:\s*source\.etag/, label: "conditional feed requests" },
   { file: "lib/feeds/opml.ts", pattern: /FEED_LIMITS\.opmlSources/, label: "bounded OPML import" },
   { file: "lib/reading/analyze-production.ts", pattern: /getProductionReadingIndex/, label: "production analysis index" },
-  { file: "app/reading/page.tsx", pattern: /ForYou/, label: "Reading candidate hub" },
+  { file: "app/reading/page.tsx", pattern: /DailyReadingList/, label: "frozen Daily-3 Reading hub" },
+  { file: "components/reading/daily-reading-list.tsx", pattern: /slice\(0,\s*3\)/, label: "frozen Daily-3 recommendation limit" },
   { file: "components/reading/for-you.tsx", pattern: /slice\(0, 3\)/, label: "one-to-three candidate UI limit" },
   { file: "tests/reading-candidate-view.test.tsx", pattern: /toHaveLength\(3\)/, label: "candidate limit test" },
   { file: "docs/rss-reading-operations.md", pattern: /RootlineVocabularyReader/, label: "RSS operations guide" }

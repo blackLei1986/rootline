@@ -64,7 +64,7 @@ describe("Daily-3 article page and reader", () => {
     expect(screen.queryByRole("article", { name: /摘要/ })).not.toBeInTheDocument();
   });
 
-  it("opens keyboard-activatable accessible word details and only shows trusted morphology", () => {
+  it("opens keyboard-activatable accessible word details and only shows trusted morphology", async () => {
     render(<DailyReadingArticle article={article} words={words} />);
     const todayButton = screen.getByRole("button", { name: "Adapt，今日词" });
     todayButton.focus();
@@ -78,6 +78,12 @@ describe("Daily-3 article page and reader", () => {
     expect(screen.getByRole("dialog", { name: "learn" })).toBeVisible();
     expect(screen.getByText("学习")).toBeVisible();
     expect(screen.queryByText(/词根|前缀|后缀/)).not.toBeInTheDocument();
+    const close = screen.getByRole("button", { name: "关闭词汇详情" });
+    fireEvent.keyDown(close, { key: "Tab" });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "learn" }), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "learn，近 7 日词" })).toHaveFocus());
   });
 
   it("routes unverified viewers to login and returns the same not-found result for non-members", async () => {
@@ -93,7 +99,7 @@ describe("Daily-3 article page and reader", () => {
 
   it("builds the reader page from its server loader for a current Daily-3 member", async () => {
     mocks.getOptionalViewer.mockResolvedValue({ userId: "reader-1", email: "reader@example.test", emailVerified: true });
-    mocks.loadDailyReadingArticlePageData.mockResolvedValue({ article, words });
+    mocks.loadDailyReadingArticlePageData.mockResolvedValue({ article, words, initialState: { openedAt: null, completedAt: null } });
     render(await DailyReadingArticlePage({ params: Promise.resolve({ id: "article-1" }) }));
     expect(mocks.loadDailyReadingArticlePageData).toHaveBeenCalledWith("reader-1", "article-1");
     expect(screen.getByRole("heading", { name: "A science story" })).toBeVisible();
@@ -105,7 +111,7 @@ describe("Daily-3 article page and reader", () => {
       return { ok: true, json: async () => ({ state: { openedAt: patch.opened ? "2026-09-24T10:00:00.000Z" : null, completedAt: patch.completed ? "2026-09-24T11:00:00.000Z" : null } }) };
     });
     vi.stubGlobal("fetch", fetchMock);
-    const { rerender } = render(<DailyReadingArticle article={article} words={words} initialState={{ openedAt: null, completedAt: null }} />);
+    const { unmount } = render(<DailyReadingArticle article={article} words={words} initialState={{ openedAt: null, completedAt: null }} />);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/reading/articles/article-1/state", expect.objectContaining({ method: "POST", body: '{"opened":true}' })));
     fireEvent.click(screen.getByRole("button", { name: "完成阅读" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/reading/articles/article-1/state", expect.objectContaining({ body: '{"completed":true}' })));
@@ -113,7 +119,8 @@ describe("Daily-3 article page and reader", () => {
     expect(fetchMock).not.toHaveBeenCalledWith("/api/today/events", expect.anything());
 
     fetchMock.mockClear();
-    rerender(<DailyReadingArticle article={article} words={words} initialState={{ openedAt: "2026-09-24T10:00:00.000Z", completedAt: "2026-09-24T11:00:00.000Z" }} />);
+    unmount();
+    render(<DailyReadingArticle article={article} words={words} initialState={{ openedAt: "2026-09-24T10:00:00.000Z", completedAt: "2026-09-24T11:00:00.000Z" }} />);
     expect(screen.getByText("已完成阅读")).toBeVisible();
     expect(fetchMock).not.toHaveBeenCalled();
   });

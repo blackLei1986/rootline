@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { BookOpen } from "lucide-react";
 import { DailyReadingList, DailyReadingSignInPrompt } from "@/components/reading/daily-reading-list";
 import { getOptionalViewer } from "@/lib/auth/session";
@@ -32,7 +33,7 @@ export default async function ReadingPage() {
         {!verified ? <DailyReadingSignInPrompt /> : unavailable ? (
           <section role="alert" className="rounded-3xl border border-dashed bg-white px-6 py-12 text-center">
             <h2 className="text-xl font-bold">阅读推荐暂时不可用，请稍后重试。</h2>
-            <a href="/reading" className="mt-4 inline-flex rounded-xl border px-4 py-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]">重试</a>
+            <Link href="/reading" className="mt-4 inline-flex rounded-xl border px-4 py-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]">重试</Link>
           </section>
         ) : <DailyReadingList recommendations={recommendations} />}
       </div>
