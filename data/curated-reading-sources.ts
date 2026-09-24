@@ -11,12 +11,6 @@ export interface CuratedReadingSource {
   reviewedAt: string;
 }
 
-// This code-managed key/URL map is the admission boundary. Starter feeds and
-// user subscriptions are never implicitly promoted into the curated corpus.
-const reviewedFeedUrls: Readonly<Record<string, string>> = Object.freeze({
-  "nasa-recently-published": "https://www.nasa.gov/news-release/feed/"
-});
-
 export function defineCuratedReadingSources(sources: readonly CuratedReadingSource[]): readonly CuratedReadingSource[] {
   const keys = new Set<string>();
   const urls = new Set<string>();
@@ -60,9 +54,21 @@ export const curatedReadingSources = defineCuratedReadingSources([
 ]);
 
 export function isEligibleCuratedReadingSource(source: CuratedReadingSource): boolean {
-  return source.enabled
+  // This code-managed registry is the admission boundary. A database row may
+  // be an equivalent clone, but every reviewed field must still match.
+  const reviewed = curatedReadingSources.find((entry) => entry.key === source.key);
+  return reviewed !== undefined
+    && reviewed.enabled
+    && source.enabled === reviewed.enabled
     && source.language === "en"
-    && reviewedFeedUrls[source.key] === source.feedUrl;
+    && source.language === reviewed.language
+    && source.feedUrl === reviewed.feedUrl
+    && source.siteUrl === reviewed.siteUrl
+    && source.title === reviewed.title
+    && source.attribution === reviewed.attribution
+    && source.category === reviewed.category
+    && source.qualityScore === reviewed.qualityScore
+    && source.reviewedAt === reviewed.reviewedAt;
 }
 
 export const eligibleCuratedReadingSources = Object.freeze(curatedReadingSources.filter(isEligibleCuratedReadingSource));

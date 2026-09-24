@@ -54,6 +54,17 @@ describe("curated reading sources", () => {
     expect(starterFeeds.filter(({ feedUrl }) => eligibleCuratedReadingSources.some((source) => source.feedUrl === feedUrl))).toHaveLength(0);
   });
 
+  it.each([
+    ["attribution", { attribution: "Another publisher" }],
+    ["quality score", { qualityScore: 99 }],
+    ["site URL", { siteUrl: "https://example.org/" }],
+    ["category", { category: "politics" }],
+    ["title", { title: "Different title" }],
+    ["review date", { reviewedAt: "2026-09-24" }]
+  ] as const)("rejects a clone with altered %s", (_field, change) => {
+    expect(isEligibleCuratedReadingSource({ ...nasa, ...change })).toBe(false);
+  });
+
   it("serializes the validated registry deterministically regardless of insertion order", () => {
     const other = { ...nasa, key: "unreviewed", feedUrl: "https://example.org/feed", enabled: false };
     const withExtra = { ...nasa, unreviewedFlag: true };
