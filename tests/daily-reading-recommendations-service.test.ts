@@ -49,6 +49,7 @@ describe("daily reading recommendation service", () => {
       algorithmVersion: result.algorithmVersion, generatedAt: result.generatedAt, recommendations: result.recommendations
     });
     expect(result.recommendations[0]?.matchedTodayWordIds).toEqual(["today-word"]);
+    expect(result.recommendations[0]?.matchedRecent7DayWordIds).toEqual([]);
   });
 
   it("returns a same-day snapshot unchanged without rescoring after a version change", async () => {
@@ -56,6 +57,7 @@ describe("daily reading recommendation service", () => {
     harness.snapshots.getSet.mockResolvedValue(frozen);
     const result = await harness.service.getForToday("owner-1", now);
     expect(result).toEqual({ learningDate: "2026-09-25", ...frozen });
+    expect(result.recommendations[0]).not.toHaveProperty("matchedRecent7DayWordIds");
     expect(harness.dependencies.getCandidates).not.toHaveBeenCalled();
     expect(harness.snapshots.saveFirstSet).not.toHaveBeenCalled();
   });

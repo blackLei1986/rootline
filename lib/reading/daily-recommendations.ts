@@ -58,6 +58,7 @@ export function rankDailyReadingRecommendations(
       && !todayIds.has(word.wordId)
       && !todayLemmas.has(normalizeLemma(word.lemma));
   });
+  const recentSevenDayWords = recentWords.filter((word) => Date.parse(word.learnedAt) >= now - 7 * DAY_MS);
   const knownIds = new Set(input.knownWordIds);
 
   const scored = input.candidates.flatMap((candidate) => {
@@ -71,6 +72,7 @@ export function rankDailyReadingRecommendations(
     }
     const matchedTodayWordIds = matchWordIds(candidate.lexicalMatches, input.todayTargets);
     const matchedRecentWordIds = matchWordIds(candidate.lexicalMatches, recentWords);
+    const matchedRecent7DayWordIds = matchWordIds(candidate.lexicalMatches, recentSevenDayWords);
     if (matchedTodayWordIds.length === 0 && matchedRecentWordIds.length === 0) return [];
     const estimatedUnknownCoverage = estimateUnknownCoverage(candidate, knownIds);
     const scores = {
@@ -108,6 +110,7 @@ export function rankDailyReadingRecommendations(
       scores,
       matchedTodayWordIds,
       matchedRecentWordIds,
+      matchedRecent7DayWordIds,
       estimatedUnknownCoverage,
       reasonCodes
     };

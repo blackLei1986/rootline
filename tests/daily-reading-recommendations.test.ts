@@ -63,6 +63,34 @@ describe("Daily Reading 3 deterministic scorer", () => {
     expect(result.recommendations[0]?.matchedRecentWordIds).toEqual(["current"]);
   });
 
+  it("derives an inclusive seven-day subset without changing the 30-day cohort", () => {
+    const result = rankDailyReadingRecommendations({
+      candidates: [candidate({ lexicalMatches: [
+        { wordId: "boundary", lemma: "boundary", occurrences: 1 },
+        { wordId: "older", lemma: "older", occurrences: 1 },
+        { wordId: "now", lemma: "now", occurrences: 1 },
+        { wordId: "future", lemma: "future", occurrences: 1 },
+        { wordId: "twenty-day", lemma: "twenty", occurrences: 1 },
+        { wordId: "today-id", lemma: "today", occurrences: 1 },
+        { wordId: "shared-recent", lemma: "shared", occurrences: 1 }
+      ] })],
+      todayTargets: [{ wordId: "today-id", lemma: "today" }, { wordId: "today-lemma-id", lemma: "shared" }],
+      recentWords: [
+        { wordId: "boundary", lemma: "boundary", learnedAt: "2026-09-17T12:00:00.000Z" },
+        { wordId: "older", lemma: "older", learnedAt: "2026-09-17T11:59:59.999Z" },
+        { wordId: "now", lemma: "now", learnedAt: "2026-09-24T12:00:00.000Z" },
+        { wordId: "future", lemma: "future", learnedAt: "2026-09-24T12:00:00.001Z" },
+        { wordId: "twenty-day", lemma: "twenty", learnedAt: "2026-09-04T12:00:00.000Z" },
+        { wordId: "today-id", lemma: "today", learnedAt: "2026-09-24T11:00:00.000Z" },
+        { wordId: "shared-recent", lemma: "SHARED", learnedAt: "2026-09-24T11:00:00.000Z" }
+      ],
+      knownWordIds: [], difficultyPreference: "balanced", now, sources
+    });
+
+    expect(result.recommendations[0]?.matchedRecent7DayWordIds).toEqual(["boundary", "now"]);
+    expect(result.recommendations[0]?.matchedRecentWordIds).toEqual(["boundary", "now", "older", "twenty-day"]);
+  });
+
   it("scores difficulty fit from approximate tracked unknown occurrence coverage", () => {
     const candidates = [
       candidate({ articleId: "fit", contentWordCount: 100, lexicalMatches: [

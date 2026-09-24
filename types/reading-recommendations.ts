@@ -60,6 +60,7 @@ export interface DailyReadingRecommendation {
   scores: DailyRecommendationScores;
   matchedTodayWordIds: string[];
   matchedRecentWordIds: string[];
+  matchedRecent7DayWordIds?: string[];
   estimatedUnknownCoverage: EstimatedUnknownCoverage;
   reasonCodes: string[];
 }

@@ -13,7 +13,7 @@ const result: DailyReadingRecommendationResult = {
     publisherUrl: "https://example.org/report", sourceKey: "reviewed", sourceTitle: "Reviewed News",
     attribution: "Publisher", publishedAt: null, summary: "Short summary.",
     scores: { todayMatches: 50, recentMatches: 25, difficultyFit: 80, freshness: 90, sourceQuality: 85, total: 62.75 },
-    matchedTodayWordIds: ["word-1"], matchedRecentWordIds: ["word-2"],
+    matchedTodayWordIds: ["word-1"], matchedRecentWordIds: ["word-2"], matchedRecent7DayWordIds: ["word-2"],
     estimatedUnknownCoverage: { percent: 12, approximate: true, basis: "tracked-vocabulary-match-occurrences" },
     reasonCodes: ["today-target-match", "difficulty-fit"]
   }]
@@ -89,5 +89,18 @@ describe("daily reading recommendation snapshot repository", () => {
     expect(saved).toMatchObject({ recommendations: result.recommendations });
     expect(JSON.stringify(saved)).not.toContain("extracted_text");
     expect(JSON.stringify(saved)).not.toContain("article body");
+  });
+
+  it("loads a legacy snapshot without adding or rewriting the optional seven-day cohort", async () => {
+    const legacyItem = { ...result.recommendations[0]! };
+    delete legacyItem.matchedRecent7DayWordIds;
+    const legacy: DailyReadingRecommendationResult = {
+      ...result,
+      recommendations: [legacyItem]
+    };
+    const { repository, calls } = testRepository(legacy);
+
+    await expect(repository.getSet("owner-id", "2026-09-24")).resolves.toEqual(legacy);
+    expect(calls.every((call) => call.operation !== "upsert")).toBe(true);
   });
 });
