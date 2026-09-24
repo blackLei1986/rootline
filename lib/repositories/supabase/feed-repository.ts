@@ -11,11 +11,75 @@ import type { FeedSourceDTO, NormalizedFeed, NormalizedFeedEntry } from "@/types
 import type { TodayArticleBundle } from "@/lib/today/service";
 import type { RecentArticleHistory } from "@/lib/today/article-selection";
 import type { ReadingAvailability } from "@/lib/today/degradation";
+import type { DailyReadingCandidate } from "@/types/reading-recommendations";
 
 type DatabaseClient = SupabaseClient<Database>;
 
 export class SupabaseFeedRepository implements FeedRefreshRepository, CuratedIngestionRepository {
   constructor(private readonly client: DatabaseClient) {}
+
+  async listCuratedRecommendationCandidates(): Promise<DailyReadingCandidate[]> {
+    const sourcesByUrl = new Map(eligibleCuratedReadingSources.map((source) => [source.feedUrl, source]));
+    const { data: sourceRows, error: sourceError } = await this.client.from("feed_sources")
+      .select("id,normalized_feed_url")
+      .in("normalized_feed_url", [...sourcesByUrl.keys()]);
+    throwRepositoryError(sourceError, "load reviewed recommendation sources");
+    const sourceById = new Map((sourceRows ?? []).flatMap((row) => {
+      const source = sourcesByUrl.get(row.normalized_feed_url);
+      return source ? [[row.id, source] as const] : [];
+    }));
+    const sourceIds = [...sourceById.keys()];
+    if (!sourceIds.length) return [];
+
+    const { data: articles, error: articleError } = await this.client.from("articles")
+      .select("id,feed_source_id,canonical_url,publisher_url,title,published_at,summary,language,content_fingerprint,created_at")
+      .in("feed_source_id", sourceIds)
+      .eq("extraction_status", "extracted")
+      .eq("language", "en")
+      .order("published_at", { ascending: false, nullsFirst: false })
+      .limit(250);
+    throwRepositoryError(articleError, "load curated recommendation articles");
+    if (!articles?.length) return [];
+
+    const articleIds = articles.map((article) => article.id);
+    const [{ data: analyses, error: analysisError }, ...runResults] = await Promise.all([
+      this.client.from("article_analyses").select("article_id,word_count,lexical_matches")
+        .in("article_id", articleIds).eq("analysis_state", "full"),
+      ...sourceIds.map((sourceId) => this.client.from("feed_fetch_runs").select("status")
+        .eq("feed_source_id", sourceId).order("completed_at", { ascending: false }).limit(30))
+    ]);
+    throwRepositoryError(analysisError, "load curated recommendation analyses");
+    runResults.forEach((result) => throwRepositoryError(result.error, "load curated source reliability"));
+
+    const analysisByArticle = new Map((analyses ?? []).map((analysis) => [analysis.article_id, analysis]));
+    const reliabilityBySource = new Map(sourceIds.map((sourceId, index) => {
+      const runs = (runResults[index]?.data ?? []).filter((run) => run.status !== "running");
+      return [sourceId, runs.length
+        ? runs.filter((run) => run.status === "updated" || run.status === "not-modified").length / runs.length
+        : 0.5] as const;
+    }));
+
+    return articles.flatMap((article) => {
+      const source = article.feed_source_id ? sourceById.get(article.feed_source_id) : undefined;
+      const analysis = analysisByArticle.get(article.id);
+      if (!source || !analysis || !Array.isArray(analysis.lexical_matches)) return [];
+      return [{
+        articleId: article.id,
+        title: article.title,
+        canonicalUrl: article.canonical_url,
+        publisherUrl: article.publisher_url,
+        sourceKey: source.key,
+        publishedAt: article.published_at,
+        ingestedAt: article.created_at,
+        contentFingerprint: article.content_fingerprint,
+        summary: article.summary,
+        language: article.language,
+        contentWordCount: analysis.word_count,
+        lexicalMatches: analysis.lexical_matches as unknown as DailyReadingCandidate["lexicalMatches"],
+        sourceReliability: reliabilityBySource.get(article.feed_source_id!) ?? 0.5
+      }];
+    });
+  }
 
   async getSource(sourceId: string): Promise<FeedRefreshSource | null> {
     const { data, error } = await this.client

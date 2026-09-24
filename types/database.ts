@@ -242,6 +242,13 @@ export interface Database {
         started_at: string;
         completed_at: string | null;
       }>;
+      daily_reading_recommendation_sets: TableDefinition<{
+        user_id: string;
+        learning_date: string;
+        algorithm_version: string;
+        generated_at: string;
+        recommendations: Json;
+      }, "user_id" | "learning_date" | "algorithm_version" | "recommendations">;
       morphology_datasets: TableDefinition<{
         id: string; version: string; kind: "gold" | "candidate-source"; status: "draft" | "published" | "archived";
         source: string; provenance: Json; created_at: string; published_at: string | null;

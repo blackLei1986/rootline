@@ -1,6 +1,7 @@
 import type { LearningEvent, LearningStorage, WordProgress } from "@/types/progress";
 import type { ReadingDocument, ReadingProgress } from "@/types/reading";
 import type { TodayPlan } from "@/types/today";
+import type { DailyReadingRecommendationResult } from "@/types/reading-recommendations";
 
 export type RepositoryErrorCode =
   | "CONFLICT"
@@ -39,4 +40,13 @@ export interface ReadingRepository {
 export interface TodayRepository {
   getPlan(userId: string, date: string): Promise<TodayPlan | null>;
   savePlan(userId: string, plan: TodayPlan, operationId: string): Promise<void>;
+}
+
+export interface DailyReadingRecommendationRepository {
+  getSet(userId: string, learningDate: string): Promise<DailyReadingRecommendationResult | null>;
+  saveFirstSet(
+    userId: string,
+    learningDate: string,
+    result: DailyReadingRecommendationResult
+  ): Promise<DailyReadingRecommendationResult>;
 }

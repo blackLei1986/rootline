@@ -43,7 +43,7 @@ export function createProductionTodayEventService() {
   return createTodayEventService(new SupabaseTodayRepository(createAdminSupabaseClient()));
 }
 
-async function loadProductionVocabulary(): Promise<ProductionVocabularyEntry[]> {
+export async function loadProductionVocabulary(): Promise<ProductionVocabularyEntry[]> {
   vocabularyCatalog ??= readFile(
     resolve(process.cwd(), "data", "vocabulary", "production-catalog.json"),
     "utf8"
