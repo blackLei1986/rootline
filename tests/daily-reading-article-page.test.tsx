@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DailyReadingArticle } from "@/components/reading/daily-reading-article";
 import type { DailyReadingRecommendation } from "@/types/reading-recommendations";
@@ -97,5 +97,34 @@ describe("Daily-3 article page and reader", () => {
     render(await DailyReadingArticlePage({ params: Promise.resolve({ id: "article-1" }) }));
     expect(mocks.loadDailyReadingArticlePageData).toHaveBeenCalledWith("reader-1", "article-1");
     expect(screen.getByRole("heading", { name: "A science story" })).toBeVisible();
+  });
+
+  it("hydrates persisted state, marks opening/completion only through the Daily-3 endpoint, and survives refresh", async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const patch = JSON.parse(String(init?.body ?? "{}")) as { opened?: true; completed?: true };
+      return { ok: true, json: async () => ({ state: { openedAt: patch.opened ? "2026-09-24T10:00:00.000Z" : null, completedAt: patch.completed ? "2026-09-24T11:00:00.000Z" : null } }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { rerender } = render(<DailyReadingArticle article={article} words={words} initialState={{ openedAt: null, completedAt: null }} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/reading/articles/article-1/state", expect.objectContaining({ method: "POST", body: '{"opened":true}' })));
+    fireEvent.click(screen.getByRole("button", { name: "完成阅读" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/reading/articles/article-1/state", expect.objectContaining({ body: '{"completed":true}' })));
+    expect(screen.getByText("已完成阅读")).toBeVisible();
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/today/events", expect.anything());
+
+    fetchMock.mockClear();
+    rerender(<DailyReadingArticle article={article} words={words} initialState={{ openedAt: "2026-09-24T10:00:00.000Z", completedAt: "2026-09-24T11:00:00.000Z" }} />);
+    expect(screen.getByText("已完成阅读")).toBeVisible();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("offers a retry after a failed read-state request", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("offline"));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<DailyReadingArticle article={article} words={words} initialState={{ openedAt: null, completedAt: null }} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("阅读状态保存失败");
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ state: { openedAt: "2026-09-24T10:00:00.000Z", completedAt: null } }) });
+    fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
   });
 });

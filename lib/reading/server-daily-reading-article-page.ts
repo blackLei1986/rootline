@@ -4,11 +4,14 @@ import { createProductionDailyReadingRecommendationsService } from "@/lib/readin
 import { createProductionTodayService, loadProductionVocabulary } from "@/lib/today/server-service";
 import { SupabaseDailyReadingMorphologyRepository } from "@/lib/repositories/supabase/daily-reading-morphology-repository";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import type { DailyReadingArticleWord } from "@/components/reading/daily-reading-article";
+import type { DailyReadingArticleState, DailyReadingArticleWord } from "@/components/reading/daily-reading-article";
 
-export async function loadDailyReadingArticlePageData(userId: string, articleId: string): Promise<{ article: NonNullable<Awaited<ReturnType<ReturnType<typeof createProductionDailyReadingArticleService>["getArticle"]>>>; words: DailyReadingArticleWord[] } | null> {
-  const article = await createProductionDailyReadingArticleService().getArticle(userId, articleId);
+export async function loadDailyReadingArticlePageData(userId: string, articleId: string): Promise<{ article: NonNullable<Awaited<ReturnType<ReturnType<typeof createProductionDailyReadingArticleService>["getArticle"]>>>; words: DailyReadingArticleWord[]; initialState: DailyReadingArticleState } | null> {
+  const articleService = createProductionDailyReadingArticleService();
+  const article = await articleService.getArticle(userId, articleId);
   if (!article) return null;
+  const initialState = await articleService.getState(userId, articleId);
+  if (!initialState) return null;
   const recommendations = await createProductionDailyReadingRecommendationsService().getForToday(userId);
   const todayPlan = await createProductionTodayService().getOrCreateTodayPlan(userId, recommendations.learningDate, new Date());
   const vocabulary = await loadProductionVocabulary();
@@ -36,5 +39,5 @@ export async function loadDailyReadingArticlePageData(userId: string, articleId:
       level: isToday ? "today" : recentLevel
     });
   }
-  return { article, words };
+  return { article, words, initialState };
 }
