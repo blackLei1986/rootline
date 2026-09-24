@@ -27,11 +27,13 @@ function response(finalUrl: string, text: string, status = 200): SafeTextRespons
 
 class MemoryRepository implements CuratedIngestionRepository {
   articles: CuratedArticleRecord[] = [];
-  runs: Array<{ status: string; errorCode?: string }> = [];
+  runs: Array<{ status: string; errorCode?: string; etag: string | null; lastModified: string | null }> = [];
   resolveCount = 0;
+  etag: string | null = null;
+  lastModified: string | null = null;
   async resolveSource() {
     this.resolveCount++;
-    return { id: "nasa-id", feedUrl, etag: null, lastModified: null };
+    return { id: "nasa-id", feedUrl, etag: this.etag, lastModified: this.lastModified };
   }
   async saveCuratedArticle(_sourceId: string, article: CuratedArticleRecord) {
     if (this.articles.some((saved) => saved.canonicalUrl === article.canonicalUrl || saved.contentFingerprint === article.contentFingerprint)) {
@@ -40,7 +42,7 @@ class MemoryRepository implements CuratedIngestionRepository {
     this.articles.push(article);
     return "inserted" as const;
   }
-  async finishCuratedRun(_sourceId: string, input: { status: string; errorCode?: string }) {
+  async finishCuratedRun(_sourceId: string, input: { status: string; errorCode?: string; etag: string | null; lastModified: string | null }) {
     this.runs.push(input);
   }
 }
@@ -121,6 +123,53 @@ describe("curated ingestion", () => {
     expect(repo.runs).toHaveLength(1);
     expect(repo.runs[0]).toMatchObject({ status: "failed", errorCode: "FETCH_FAILED" });
     expect(repo.articles).toEqual([previous]);
+  });
+
+  it("retains old conditional validators after an item fails, so the failed feed can be retried", async () => {
+    const repo = new MemoryRepository();
+    repo.etag = '"old"';
+    repo.lastModified = "Tue, 22 Sep 2026 00:00:00 GMT";
+    const requested: Array<{ etag?: string | null; lastModified?: string | null }> = [];
+    const fetchText = async (url: string, _kind: string, conditional: { etag?: string | null; lastModified?: string | null }) => {
+      if (url === feedUrl) {
+        requested.push(conditional);
+        return { ...response(feedUrl, rss(item(articleUrl) + item("https://example.org/foreign"))),
+          etag: '"new"', lastModified: "Wed, 23 Sep 2026 00:00:00 GMT" };
+      }
+      return response(articleUrl, articleHtml());
+    };
+    const ingest = createCuratedIngestionJob({ repository: repo, fetchText });
+    const first = await ingest("nasa-recently-published");
+    const second = await ingest("nasa-recently-published");
+    expect(first).toMatchObject({ status: "failed", inserted: 1, rejected: 1 });
+    expect(second.status).toBe("failed");
+    expect(requested).toEqual([
+      { etag: '"old"', lastModified: "Tue, 22 Sep 2026 00:00:00 GMT" },
+      { etag: '"old"', lastModified: "Tue, 22 Sep 2026 00:00:00 GMT" }
+    ]);
+    expect(repo.runs[0]).toMatchObject({ etag: '"old"', lastModified: "Tue, 22 Sep 2026 00:00:00 GMT" });
+  });
+
+  it("commits new conditional validators after a fully successful feed run", async () => {
+    const repo = new MemoryRepository();
+    repo.etag = '"old"';
+    const fetchText = async (url: string) => url === feedUrl
+      ? { ...response(feedUrl, rss(item(articleUrl))), etag: '"new"', lastModified: "Wed, 23 Sep 2026 00:00:00 GMT" }
+      : response(articleUrl, articleHtml());
+    const result = await createCuratedIngestionJob({ repository: repo, fetchText })("nasa-recently-published");
+    expect(result.status).toBe("updated");
+    expect(repo.runs[0]).toMatchObject({ etag: '"new"', lastModified: "Wed, 23 Sep 2026 00:00:00 GMT" });
+  });
+
+  it("retains old validators when the fetched feed cannot be parsed", async () => {
+    const repo = new MemoryRepository();
+    repo.etag = '"old"';
+    repo.lastModified = "Tue, 22 Sep 2026 00:00:00 GMT";
+    const fetchText = async () => ({ ...response(feedUrl, "<not-a-feed/>"),
+      etag: '"new"', lastModified: "Wed, 23 Sep 2026 00:00:00 GMT" });
+    const result = await createCuratedIngestionJob({ repository: repo, fetchText })("nasa-recently-published");
+    expect(result.status).toBe("failed");
+    expect(repo.runs[0]).toMatchObject({ etag: '"old"', lastModified: "Tue, 22 Sep 2026 00:00:00 GMT" });
   });
 
   it("rejects a feed redirect to an unreviewed NASA feed path", async () => {

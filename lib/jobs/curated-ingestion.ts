@@ -142,6 +142,12 @@ export function createCuratedIngestionJob(dependencies: {
     } catch (error) {
       failureCode = errorCode(error);
     }
+    // A partial run must retry the feed body; committing its validators could
+    // turn the next request into a 304 and strand rejected entries.
+    if (result.status === "failed") {
+      etag = source.etag;
+      lastModified = source.lastModified;
+    }
     await dependencies.repository.finishCuratedRun(source.id, {
       status: result.status,
       fetched: result.fetched,

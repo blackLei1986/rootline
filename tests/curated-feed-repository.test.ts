@@ -69,11 +69,11 @@ function recordingClient(duplicate = false, failAnalysis = false) {
 }
 
 describe("curated feed repository", () => {
-  it("keeps curated-only source IDs out of generic full-text refresh while retaining custom IDs", async () => {
+  it("keeps every reviewed NASA feed ID out of generic full-text refresh while retaining other custom IDs", async () => {
     const rows = [
-      { id: "curated-id", normalized_feed_url: "https://www.nasa.gov/news-release/feed/", description: "Rootline curated source: nasa-recently-published" },
+      { id: "nasa-id", normalized_feed_url: "https://www.nasa.gov/news-release/feed/", description: "User's NASA feed" },
       { id: "custom-id", normalized_feed_url: "https://example.org/rss", description: null },
-      { id: "custom-nasa-id", normalized_feed_url: "https://www.nasa.gov/news-release/feed/", description: "NASA public feed" }
+      { id: "other-custom-id", normalized_feed_url: "https://example.net/rss", description: "Other custom feed" }
     ];
     const client = {
       from(table: string) {
@@ -84,13 +84,13 @@ describe("curated feed repository", () => {
       }
     } as unknown as SupabaseClient<Database>;
     const repository = new SupabaseFeedRepository(client);
-    expect(await repository.listRefreshableSourceIds(2)).toEqual(["custom-id", "custom-nasa-id"]);
+    expect(await repository.listRefreshableSourceIds(2)).toEqual(["custom-id", "other-custom-id"]);
   });
 
-  it("refuses direct legacy refresh of a curated-only ID but loads a custom NASA ID", async () => {
+  it("refuses direct legacy refresh of an unmarked NASA feed ID but loads another custom ID", async () => {
     const rows = new Map([
-      ["curated-id", { id: "curated-id", normalized_feed_url: "https://www.nasa.gov/news-release/feed/", description: "Rootline curated source: nasa-recently-published", etag: null, last_modified: null }],
-      ["custom-id", { id: "custom-id", normalized_feed_url: "https://www.nasa.gov/news-release/feed/", description: "User's NASA feed", etag: null, last_modified: null }]
+      ["nasa-id", { id: "nasa-id", normalized_feed_url: "https://www.nasa.gov/news-release/feed/", description: "User's NASA feed", etag: null, last_modified: null }],
+      ["custom-id", { id: "custom-id", normalized_feed_url: "https://example.org/rss", description: "Custom feed", etag: null, last_modified: null }]
     ]);
     const client = {
       from: () => ({ select: () => ({ eq: (_column: string, id: string) => ({
@@ -98,11 +98,11 @@ describe("curated feed repository", () => {
       }) }) })
     } as unknown as SupabaseClient<Database>;
     const repository = new SupabaseFeedRepository(client);
-    expect(await repository.getSource("curated-id")).toBeNull();
+    expect(await repository.getSource("nasa-id")).toBeNull();
     expect(await repository.getSource("custom-id")).toMatchObject({ id: "custom-id" });
   });
 
-  it("marks a newly created curated source without modifying existing custom sources", async () => {
+  it("creates the reviewed NASA source with ordinary attribution metadata", async () => {
     const writes: Record<string, unknown>[] = [];
     const client = {
       from(table: string) {
@@ -126,7 +126,7 @@ describe("curated feed repository", () => {
       attribution: "NASA", category: "science", language: "en", qualityScore: 85,
       enabled: true, reviewedAt: "2026-09-23"
     });
-    expect(writes[0]).toMatchObject({ description: "Rootline curated source: nasa-recently-published" });
+    expect(writes[0]).toMatchObject({ description: "Publisher: NASA" });
   });
 
   it("protects a pre-existing NASA source while preserving its ID and description", async () => {
@@ -155,27 +155,27 @@ describe("curated feed repository", () => {
       enabled: true, reviewedAt: "2026-09-23"
     });
     expect(source).toMatchObject({ id: "existing-id", etag: '"old"' });
-    expect(row.description).toBe("User's NASA headlines\nRootline curated source: nasa-recently-published");
-    expect(writes).toEqual([{ description: row.description }]);
+    expect(row.description).toBe("User's NASA headlines");
+    expect(writes).toEqual([]);
   });
 
-  it("keeps a claimed NASA source protected when a custom subscription resolves the same URL", async () => {
+  it("keeps a custom NASA source metadata update available while URL-based protection remains active", async () => {
     let upserts = 0;
     const client = {
       from: () => ({
         select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: {
           id: "curated-id", normalized_feed_url: "https://www.nasa.gov/news-release/feed/",
-          description: "Rootline curated source: nasa-recently-published"
+          description: "User's NASA feed"
         }, error: null }) }) }),
         upsert: () => { upserts++; return { select: () => ({ single: async () => ({ data: { id: "curated-id" }, error: null }) }) }; }
       })
     } as unknown as SupabaseClient<Database>;
     const repository = new SupabaseFeedRepository(client);
     expect(await repository.upsertSource("https://www.nasa.gov/news-release/feed/")).toBe("curated-id");
-    expect(upserts).toBe(0);
+    expect(upserts).toBe(1);
   });
 
-  it("excludes a pre-existing pending NASA article from legacy body analysis after source protection", async () => {
+  it("excludes a pending NASA article from legacy body analysis before curated resolution", async () => {
     const pending = [
       { id: "nasa-pending", feed_source_id: "curated-id", publisher_url: "https://www.nasa.gov/story", title: "NASA story" },
       { id: "custom-pending", feed_source_id: "custom-id", publisher_url: "https://example.org/story", title: "Custom story" }
@@ -186,7 +186,7 @@ describe("curated feed repository", () => {
         if (table === "feed_sources") return {
           select: () => ({ in: async () => ({ data: [{
             id: "curated-id", normalized_feed_url: "https://www.nasa.gov/news-release/feed/",
-            description: "User's NASA headlines\nRootline curated source: nasa-recently-published"
+            description: "User's NASA headlines"
           }], error: null }) })
         };
         return {
@@ -206,7 +206,7 @@ describe("curated feed repository", () => {
     expect(pendingFilter).toContain("curated-id");
   });
 
-  it("blocks a stale legacy worker from writing full text after NASA source protection", async () => {
+  it("blocks a stale legacy worker from writing full text for an unmarked NASA source", async () => {
     const writes: Array<{ table: string; payload: Record<string, unknown> }> = [];
     const client = {
       from(table: string) {
@@ -215,7 +215,7 @@ describe("curated feed repository", () => {
             data: table === "articles"
               ? { feed_source_id: "curated-id" }
               : { id, normalized_feed_url: "https://www.nasa.gov/news-release/feed/",
-                  description: "Rootline curated source: nasa-recently-published" },
+                  description: "User's NASA feed" },
             error: null
           }) }) }),
           update(payload: Record<string, unknown>) {
@@ -237,6 +237,36 @@ describe("curated feed repository", () => {
     }, article.contentFingerprint, article.analysis)).rejects.toThrow(/curated/i);
     await repository.rejectArticle("pending-id", "ANALYSIS_FAILED");
     expect(writes).toHaveLength(0);
+  });
+
+  it("keeps the existing full-text analysis behavior for an unrelated custom feed", async () => {
+    const writes: Array<{ table: string; payload: Record<string, unknown> }> = [];
+    const client = {
+      from(table: string) {
+        return {
+          select: () => ({ eq: () => ({ maybeSingle: async () => ({
+            data: table === "articles" ? { feed_source_id: "custom-id" }
+              : { normalized_feed_url: "https://example.org/rss" }, error: null
+          }) }) }),
+          update(payload: Record<string, unknown>) {
+            writes.push({ table, payload });
+            return { eq: async () => ({ error: null }) };
+          },
+          upsert(payload: Record<string, unknown>) {
+            writes.push({ table, payload });
+            return Promise.resolve({ error: null });
+          }
+        };
+      }
+    } as unknown as SupabaseClient<Database>;
+    const repository = new SupabaseFeedRepository(client);
+    await repository.saveArticleAnalysis("custom-article", {
+      canonicalUrl: "https://example.org/story", publisherUrl: "https://example.org/story",
+      title: "Custom story", byline: null, excerpt: null,
+      text: "Existing custom article body", wordCount: 150, language: "en"
+    }, "custom-fingerprint", article.analysis);
+    expect(writes.find((write) => write.table === "articles")?.payload)
+      .toMatchObject({ extracted_text: "Existing custom article body" });
   });
 
   it("refuses unreviewed source metadata before database resolution", async () => {
