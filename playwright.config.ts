@@ -8,6 +8,7 @@ export default defineConfig({
   reporter: [["list"]],
   use: {
     baseURL: "http://localhost:3000",
+    ...(process.env.E2E_DAILY_READING_STORAGE_STATE ? { storageState: process.env.E2E_DAILY_READING_STORAGE_STATE } : {}),
     trace: "retain-on-failure",
     screenshot: "only-on-failure"
   },

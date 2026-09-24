@@ -13,5 +13,5 @@ export default async function DailyReadingArticlePage({ params }: { params: Prom
   const data = await loadDailyReadingArticlePageData(viewer.userId, id);
   if (!data) notFound();
   const stateKey = `${id}:${data.initialState.openedAt ?? ""}:${data.initialState.completedAt ?? ""}`;
-  return <DailyReadingArticle key={stateKey} article={data.article} words={data.words} initialState={data.initialState} />;
+  return <DailyReadingArticle key={stateKey} article={data.article} words={data.words} summaryTokens={data.summaryTokens} initialState={data.initialState} />;
 }

@@ -8,6 +8,7 @@ export interface DailyReadingHighlightMatch {
   surfaceForms?: string[];
   level: HighlightLevel;
 }
+export interface DailyReadingKnownVocabularyEntry { lemma: string; surfaceForms: readonly string[] }
 export interface SummaryToken {
   text: string;
   wordId?: string;
@@ -16,7 +17,7 @@ export interface SummaryToken {
 
 const levelPriority: Record<HighlightLevel, number> = { today: 3, "recent-7-day": 2, "recent-legacy": 1 };
 
-export function buildSummaryTokens(summary: string, matches: readonly DailyReadingHighlightMatch[]): SummaryToken[] {
+export function buildSummaryTokens(summary: string, matches: readonly DailyReadingHighlightMatch[], knownVocabulary: readonly DailyReadingKnownVocabularyEntry[]): SummaryToken[] {
   const matchByForm = new Map<string, DailyReadingHighlightMatch>();
   for (const match of matches) {
     for (const form of [match.lemma, ...(match.surfaceForms ?? [])]) {
@@ -25,7 +26,7 @@ export function buildSummaryTokens(summary: string, matches: readonly DailyReadi
       if (!existing || levelPriority[match.level] > levelPriority[existing.level]) matchByForm.set(key, match);
     }
   }
-  const index = makeLemmatizerIndex(matchByForm);
+  const index = makeLemmatizerIndex(matchByForm, knownVocabulary);
   const tokens: SummaryToken[] = [];
   const wordPattern = /[A-Za-z]+(?:['’][A-Za-z]+)*/g;
   let cursor = 0;
@@ -50,10 +51,19 @@ export function getHighlightLabel(level: HighlightLevel): string {
   return level === "recent-7-day" ? "近 7 日词" : "近期词";
 }
 
-function makeLemmatizerIndex(matches: ReadonlyMap<string, DailyReadingHighlightMatch>): VocabularyIndex {
-  const wordByLemma = new Map([...matches].map(([lemma, match]) => [lemma, { lemma, id: match.wordId }] as never));
+function makeLemmatizerIndex(matches: ReadonlyMap<string, DailyReadingHighlightMatch>, knownVocabulary: readonly DailyReadingKnownVocabularyEntry[]): VocabularyIndex {
+  const wordByLemma = new Map<string, { lemma: string; id: string }>();
   const wordBySurfaceForm = new Map<string, { lemma: string; id: string }>();
-  for (const [form, match] of matches) wordBySurfaceForm.set(form, { lemma: match.lemma, id: match.wordId });
+  for (const entry of knownVocabulary) {
+    const lemma = normalize(entry.lemma);
+    wordByLemma.set(lemma, { lemma, id: lemma });
+    for (const form of entry.surfaceForms) wordBySurfaceForm.set(normalize(form), { lemma, id: lemma });
+  }
+  for (const [form, match] of matches) {
+    const lemma = normalize(match.lemma);
+    wordByLemma.set(lemma, { lemma, id: match.wordId });
+    wordBySurfaceForm.set(form, { lemma, id: match.wordId });
+  }
   return { wordByLemma, wordBySurfaceForm } as unknown as VocabularyIndex;
 }
 

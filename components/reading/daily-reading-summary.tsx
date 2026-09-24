@@ -1,7 +1,6 @@
-import { buildSummaryTokens, getHighlightLabel, type DailyReadingHighlightMatch } from "@/lib/reading/daily-reading-highlights";
+import { getHighlightLabel, type SummaryToken } from "@/lib/reading/daily-reading-highlights";
 
-export function DailyReadingSummary({ summary, matches, onSelectWord }: { summary: string; matches: readonly DailyReadingHighlightMatch[]; onSelectWord(wordId: string, trigger: HTMLButtonElement): void }) {
-  const tokens = buildSummaryTokens(summary, matches);
+export function DailyReadingSummary({ tokens, onSelectWord }: { tokens: readonly SummaryToken[]; onSelectWord(wordId: string, trigger: HTMLButtonElement): void }) {
   return <article aria-label="文章摘要" className="mt-8 rounded-3xl border bg-white px-5 py-6 sm:px-8 sm:py-9">
     <h2 className="text-lg font-bold">摘要</h2>
     <p className="mt-5 select-text whitespace-pre-wrap text-lg leading-9 text-[var(--foreground)] sm:text-xl sm:leading-10">

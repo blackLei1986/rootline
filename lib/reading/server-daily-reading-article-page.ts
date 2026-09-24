@@ -3,10 +3,11 @@ import { createProductionDailyReadingArticleService } from "@/lib/reading/server
 import { createProductionDailyReadingRecommendationsService } from "@/lib/reading/server-recommendations";
 import { createProductionTodayService, loadProductionVocabulary } from "@/lib/today/server-service";
 import { SupabaseDailyReadingMorphologyRepository } from "@/lib/repositories/supabase/daily-reading-morphology-repository";
+import { buildSummaryTokens } from "@/lib/reading/daily-reading-highlights";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { DailyReadingArticleState, DailyReadingArticleWord } from "@/components/reading/daily-reading-article";
 
-export async function loadDailyReadingArticlePageData(userId: string, articleId: string): Promise<{ article: NonNullable<Awaited<ReturnType<ReturnType<typeof createProductionDailyReadingArticleService>["getArticle"]>>>; words: DailyReadingArticleWord[]; initialState: DailyReadingArticleState } | null> {
+export async function loadDailyReadingArticlePageData(userId: string, articleId: string): Promise<{ article: NonNullable<Awaited<ReturnType<ReturnType<typeof createProductionDailyReadingArticleService>["getArticle"]>>>; words: DailyReadingArticleWord[]; summaryTokens: ReturnType<typeof buildSummaryTokens>; initialState: DailyReadingArticleState } | null> {
   const articleService = createProductionDailyReadingArticleService();
   const article = await articleService.getArticle(userId, articleId);
   if (!article) return null;
@@ -39,5 +40,7 @@ export async function loadDailyReadingArticlePageData(userId: string, articleId:
       level: isToday ? "today" : recentLevel
     });
   }
-  return { article, words, initialState };
+  const summaryMatches = words.map(({ wordId, lemma, surfaceForms, level }) => ({ wordId, lemma, surfaceForms, level }));
+  const summaryTokens = buildSummaryTokens(article.summary ?? "", summaryMatches, vocabulary);
+  return { article, words, summaryTokens, initialState };
 }
