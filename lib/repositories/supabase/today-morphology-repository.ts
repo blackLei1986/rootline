@@ -3,13 +3,14 @@ import { collectPagedRecords } from "@/lib/repositories/supabase/morphology-cove
 import { throwRepositoryError, type DatabaseClient } from "@/lib/repositories/supabase/shared";
 import type { ProductionVocabularyEntry } from "@/types/vocabulary";
 
-type RawRoot = { id: string; root_key: string; meaning_en: unknown; meaning_zh: unknown; educational_content: unknown; provenance: unknown };
-type RawRecord = {
+export type RawTodayMorphologyRoot = { id: string; root_key: string; meaning_en: unknown; meaning_zh: unknown; educational_content: unknown; provenance: unknown };
+export type RawTodayMorphologyRecord = {
   catalog_word_id: string; lemma: string; confidence: DailyTargetMorphology["confidence"];
   review_status: DailyTargetMorphology["reviewStatus"]; source: string; family_id: string | null;
   formation_explanation: string | null;
   word_morphology_segments?: Array<{ position: number; kind: "prefix" | "root" | "suffix"; surface_form: string; root_id: string | null; meaning: string | null; explanation: string | null }>;
 };
+export type RawTodayMorphologyFamily = { id: string; family_key: string; formation_explanation: string | null };
 
 export class SupabaseTodayMorphologyRepository {
   constructor(private readonly client: DatabaseClient) {}
@@ -30,14 +31,14 @@ export class SupabaseTodayMorphologyRepository {
           .select("catalog_word_id,lemma,confidence,review_status,source,family_id,formation_explanation,word_morphology_segments(position,kind,surface_form,root_id,meaning,explanation)")
           .eq("dataset_id", datasetId).order("catalog_word_id").range(from, to);
         throwRepositoryError(result.error, "load Today morphology records");
-        return (result.data ?? []) as unknown as RawRecord[];
+        return (result.data ?? []) as unknown as RawTodayMorphologyRecord[];
       })
     ]);
     throwRepositoryError(rootResult.error, "load Today morphology roots");
     throwRepositoryError(familyResult.error, "load Today morphology families");
     return mapTodayMorphologyCandidates(vocabulary, {
-      roots: (rootResult.data ?? []) as unknown as RawRoot[],
-      families: (familyResult.data ?? []) as unknown as Array<{ id: string; family_key: string; formation_explanation: string | null }>,
+      roots: (rootResult.data ?? []) as unknown as RawTodayMorphologyRoot[],
+      families: (familyResult.data ?? []) as unknown as RawTodayMorphologyFamily[],
       records
     });
   }
@@ -45,11 +46,7 @@ export class SupabaseTodayMorphologyRepository {
 
 export function mapTodayMorphologyCandidates(
   vocabulary: readonly ProductionVocabularyEntry[],
-  raw: {
-    roots: RawRoot[];
-    families: Array<{ id: string; family_key: string; formation_explanation: string | null }>;
-    records: RawRecord[];
-  }
+  raw: { roots: RawTodayMorphologyRoot[]; families: RawTodayMorphologyFamily[]; records: RawTodayMorphologyRecord[] }
 ): DailyTargetCandidate[] {
   const entries = new Map(vocabulary.map((entry) => [entry.id, entry]));
   const roots = new Map(raw.roots.map((root) => [root.id, root]));

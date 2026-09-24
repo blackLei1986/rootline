@@ -54,15 +54,15 @@ export function buildDailyTargets(input: DailyTargetPlannerInput): DailyTargetSn
 
   for (const candidate of [...input.weakCandidates].sort(weakOrder).slice(0, WEAK_TARGET_LIMIT)) {
     if (selected.length >= TARGET_LIMIT) break;
-    append(fromCandidate(candidate, "weak", trustedMorphology(candidate)));
+    append(fromCandidate(candidate, "weak", trustedDailyTargetMorphology(candidate)));
   }
 
   const rootCore = uniqueCandidates(input.rootCoreCandidates)
-    .filter((candidate) => Boolean(trustedMorphology(candidate)))
+    .filter((candidate) => Boolean(trustedDailyTargetMorphology(candidate)))
     .filter((candidate) => !selectedLemmas.has(normalize(candidate.entry.lemma || candidate.entry.word)));
   for (const candidate of selectRootCore(rootCore)) {
     if (selected.length >= TARGET_LIMIT) break;
-    append(fromCandidate(candidate, "root-core", trustedMorphology(candidate)));
+    append(fromCandidate(candidate, "root-core", trustedDailyTargetMorphology(candidate)));
   }
 
   const support = uniqueCandidates(input.supportCandidates).sort(supportOrder);
@@ -77,7 +77,7 @@ export function buildDailyTargets(input: DailyTargetPlannerInput): DailyTargetSn
 function selectRootCore(candidates: DailyTargetCandidate[]): DailyTargetCandidate[] {
   const byRoot = new Map<string, DailyTargetCandidate[]>();
   for (const candidate of candidates) {
-    const rootId = trustedMorphology(candidate)?.rootId;
+    const rootId = trustedDailyTargetMorphology(candidate)?.rootId;
     if (!rootId) continue;
     const group = byRoot.get(rootId) ?? [];
     group.push(candidate);
@@ -88,7 +88,7 @@ function selectRootCore(candidates: DailyTargetCandidate[]): DailyTargetCandidat
     rootId,
     words: words.sort(rootCoreOrder),
     relevance: Math.max(...words.map((word) => word.rootRelevanceScore ?? 0)),
-    familyBreadth: new Set(words.map((word) => trustedMorphology(word)?.familyId ?? `word:${word.entry.id}`)).size
+    familyBreadth: new Set(words.map((word) => trustedDailyTargetMorphology(word)?.familyId ?? `word:${word.entry.id}`)).size
   })).sort((left, right) => right.relevance - left.relevance
     || right.familyBreadth - left.familyBreadth
     || right.words.length - left.words.length
@@ -109,7 +109,7 @@ function selectRootCore(candidates: DailyTargetCandidate[]): DailyTargetCandidat
         index += 1;
         nextIndex.set(root.rootId, index);
         if (!candidate) continue;
-        const morphology = trustedMorphology(candidate);
+        const morphology = trustedDailyTargetMorphology(candidate);
         const familyKey = `${root.rootId}:${morphology?.familyId ?? `word:${candidate.entry.id}`}`;
         if ((familyCounts.get(familyKey) ?? 0) >= 2) continue;
         result.push(candidate);
@@ -122,7 +122,7 @@ function selectRootCore(candidates: DailyTargetCandidate[]): DailyTargetCandidat
   return result;
 }
 
-function trustedMorphology(candidate: DailyTargetCandidate): DailyTargetMorphology | null {
+export function trustedDailyTargetMorphology(candidate: DailyTargetCandidate): DailyTargetMorphology | null {
   const morphology = candidate.morphology;
   if (!morphology || morphology.confidence === "none" || morphology.reviewStatus === "rejected") return null;
   const verifiedAndApproved = morphology.confidence === "verified" && morphology.reviewStatus === "approved";
