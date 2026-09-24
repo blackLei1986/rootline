@@ -58,4 +58,33 @@ describe("safe feed fetch", () => {
       })
     ).rejects.toMatchObject({ code: "RESPONSE_TOO_LARGE" });
   });
+
+  it("blocks a public off-publisher redirect before issuing its request", async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, {
+      status: 302,
+      headers: { location: "https://attacker.example/article" }
+    }));
+    await expect(safeFetchText("https://www.nasa.gov/article", "article", {
+      resolver: { resolve: async () => ["93.184.216.34"] },
+      fetchImpl: fetchImpl as typeof fetch,
+      now: () => new Date(),
+      contact: "admin@example.com"
+    }, {}, { allowedHostname: (hostname) => hostname === "nasa.gov" || hostname.endsWith(".nasa.gov") }))
+      .rejects.toMatchObject({ code: "BLOCKED_ADDRESS" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks a downgrade to HTTP on a publisher-owned redirect", async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, {
+      status: 302, headers: { location: "http://science.nasa.gov/article" }
+    }));
+    await expect(safeFetchText("https://www.nasa.gov/article", "article", {
+      resolver: { resolve: async () => ["93.184.216.34"] },
+      fetchImpl: fetchImpl as typeof fetch,
+      now: () => new Date(),
+      contact: "admin@example.com"
+    }, {}, { allowedHostname: (hostname) => hostname.endsWith(".nasa.gov"), requireHttps: true }))
+      .rejects.toMatchObject({ code: "BLOCKED_ADDRESS" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
 });

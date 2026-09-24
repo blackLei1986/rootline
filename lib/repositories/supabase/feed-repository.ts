@@ -2,6 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { canonicalizeArticleUrl } from "@/lib/articles/canonicalize";
 import { throwRepositoryError, toJson } from "@/lib/repositories/supabase/shared";
 import type { FeedRefreshRepository, FeedRefreshSource } from "@/lib/jobs/feed-refresh";
+import type { CuratedArticleRecord, CuratedIngestionRepository } from "@/lib/jobs/curated-ingestion";
+import type { CuratedReadingSource } from "@/data/curated-reading-sources";
+import { eligibleCuratedReadingSources, isEligibleCuratedReadingSource } from "@/data/curated-reading-sources";
 import type { ArticleAnalysis, ArticleCandidate, ArticleRecord, ExtractedArticle } from "@/types/articles";
 import type { Database } from "@/types/database";
 import type { FeedSourceDTO, NormalizedFeed, NormalizedFeedEntry } from "@/types/feeds";
@@ -10,23 +13,151 @@ import type { RecentArticleHistory } from "@/lib/today/article-selection";
 import type { ReadingAvailability } from "@/lib/today/degradation";
 
 type DatabaseClient = SupabaseClient<Database>;
+const CURATED_SOURCE_DESCRIPTION_PREFIX = "Rootline curated source: ";
 
-export class SupabaseFeedRepository implements FeedRefreshRepository {
+export class SupabaseFeedRepository implements FeedRefreshRepository, CuratedIngestionRepository {
   constructor(private readonly client: DatabaseClient) {}
 
   async getSource(sourceId: string): Promise<FeedRefreshSource | null> {
     const { data, error } = await this.client
       .from("feed_sources")
-      .select("id,normalized_feed_url,etag,last_modified")
+      .select("id,normalized_feed_url,description,etag,last_modified")
       .eq("id", sourceId)
       .maybeSingle();
     throwRepositoryError(error, "load feed source");
+    if (data && isCuratedOnlySourceRow(data)) return null;
     return data ? {
       id: data.id,
       feedUrl: data.normalized_feed_url,
       etag: data.etag,
       lastModified: data.last_modified
     } : null;
+  }
+
+  async resolveSource(source: CuratedReadingSource): Promise<FeedRefreshSource> {
+    if (!isEligibleCuratedReadingSource(source)) throw new Error("Unreviewed curated source.");
+    const findByUrl = async () => {
+      const { data, error } = await this.client.from("feed_sources")
+        .select("id,normalized_feed_url,description,etag,last_modified")
+        .eq("normalized_feed_url", source.feedUrl)
+        .maybeSingle();
+      throwRepositoryError(error, "load curated source");
+      return data;
+    };
+    let row = await findByUrl();
+    if (!row) {
+      const { data, error } = await this.client.from("feed_sources").insert({
+        normalized_feed_url: source.feedUrl,
+        title: source.title,
+        site_url: source.siteUrl,
+        description: `${CURATED_SOURCE_DESCRIPTION_PREFIX}${source.key}`
+      }).select("id,normalized_feed_url,description,etag,last_modified").single();
+      if (error?.code === "23505") row = await findByUrl();
+      else {
+        throwRepositoryError(error, "create curated source");
+        row = data;
+      }
+    } else if (!isCuratedOnlySourceRow(row)) {
+      const marker = `${CURATED_SOURCE_DESCRIPTION_PREFIX}${source.key}`;
+      const description = row.description ? `${row.description}\n${marker}` : marker;
+      const { error } = await this.client.from("feed_sources")
+        .update({ description })
+        .eq("id", row.id);
+      throwRepositoryError(error, "protect existing curated source");
+    }
+    if (!row || row.normalized_feed_url !== source.feedUrl) {
+      throw new Error("Curated source could not be resolved by its reviewed URL.");
+    }
+    return { id: row.id, feedUrl: row.normalized_feed_url, etag: row.etag, lastModified: row.last_modified };
+  }
+
+  async saveCuratedArticle(sourceId: string, article: CuratedArticleRecord): Promise<"inserted" | "duplicate"> {
+    const { data, error: articleError } = await this.client.from("articles").insert({
+      feed_source_id: sourceId,
+      external_id: article.externalId,
+      canonical_url: article.canonicalUrl,
+      publisher_url: article.publisherUrl,
+      title: article.title,
+      author: article.author,
+      summary: article.summary,
+      published_at: article.publishedAt,
+      language: article.language,
+      extracted_text: null,
+      content_fingerprint: article.contentFingerprint,
+      extraction_status: "extracted",
+      analysis_version: article.analysis.vocabularyVersion
+    }).select("id").single();
+    if (articleError?.code === "23505") {
+      const { data: existing, error: lookupError } = await this.client.from("articles")
+        .select("id,feed_source_id,extraction_status")
+        .eq("canonical_url", article.canonicalUrl)
+        .maybeSingle();
+      throwRepositoryError(lookupError, "load duplicate curated article");
+      if (existing?.feed_source_id === sourceId && existing.extraction_status === "pending") {
+        await this.saveCuratedLexicalAnalysis(existing.id, article);
+        const { error: promotionError } = await this.client.from("articles").update({
+          extracted_text: null,
+          content_fingerprint: article.contentFingerprint,
+          extraction_status: "extracted",
+          extraction_error_code: null,
+          analysis_version: article.analysis.vocabularyVersion
+        }).eq("id", existing.id);
+        throwRepositoryError(promotionError, "promote pending curated article");
+      }
+      return "duplicate";
+    }
+    throwRepositoryError(articleError, "save curated article");
+    if (!data) throw new Error("Curated article was not saved.");
+
+    try {
+      await this.saveCuratedLexicalAnalysis(data.id, article);
+    } catch (error) {
+      const { error: cleanupError } = await this.client.from("articles").delete().eq("id", data.id);
+      throwRepositoryError(cleanupError, "remove incomplete curated article");
+      throw error;
+    }
+    return "inserted";
+  }
+
+  private async saveCuratedLexicalAnalysis(articleId: string, article: CuratedArticleRecord): Promise<void> {
+    const analysis = article.analysis;
+    const { error } = await this.client.from("article_analyses").upsert({
+      article_id: articleId,
+      vocabulary_version: analysis.vocabularyVersion,
+      analysis_state: analysis.analysisState,
+      word_count: analysis.wordCount,
+      unique_lemma_count: analysis.uniqueLemmaCount,
+      estimated_minutes: analysis.estimatedMinutes,
+      lexical_matches: toJson(analysis.lexicalMatches),
+      topic_features: toJson({ sourceKey: article.sourceKey, attribution: article.attribution }),
+      analyzed_at: analysis.analyzedAt
+    }, { onConflict: "article_id" });
+    throwRepositoryError(error, "save curated lexical analysis");
+  }
+
+  async finishCuratedRun(sourceId: string, input: {
+    status: "updated" | "not-modified" | "failed";
+    fetched: number;
+    inserted: number;
+    duplicate: number;
+    etag: string | null;
+    lastModified: string | null;
+    errorCode?: string;
+    startedAt?: string;
+  }): Promise<void> {
+    await this.finishRefresh(sourceId, input);
+    const completedAt = new Date().toISOString();
+    const { error } = await this.client.from("feed_fetch_runs").insert({
+      feed_source_id: sourceId,
+      status: input.status,
+      fetched_count: input.fetched,
+      inserted_count: input.inserted,
+      duplicate_count: input.duplicate,
+      error_code: input.errorCode ?? null,
+      started_at: input.startedAt ?? completedAt,
+      completed_at: completedAt
+    });
+    throwRepositoryError(error, "record curated feed run");
   }
 
   async saveEntries(
@@ -93,6 +224,14 @@ export class SupabaseFeedRepository implements FeedRefreshRepository {
 
   async upsertSource(feedUrl: string, feed?: NormalizedFeed): Promise<string> {
     const normalized = canonicalizeArticleUrl(feedUrl);
+    if (eligibleCuratedReadingSources.some((source) => source.feedUrl === normalized)) {
+      const { data: existing, error: existingError } = await this.client.from("feed_sources")
+        .select("id,normalized_feed_url,description")
+        .eq("normalized_feed_url", normalized)
+        .maybeSingle();
+      throwRepositoryError(existingError, "load existing feed source");
+      if (existing && isCuratedOnlySourceRow(existing)) return existing.id;
+    }
     const { data, error } = await this.client
       .from("feed_sources")
       .upsert(
@@ -155,20 +294,34 @@ export class SupabaseFeedRepository implements FeedRefreshRepository {
   async listRefreshableSourceIds(limit: number): Promise<string[]> {
     const { data, error } = await this.client
       .from("feed_sources")
-      .select("id")
+      .select("id,normalized_feed_url,description")
       .neq("fetch_status", "fetching")
       .order("last_successful_fetch_at", { ascending: true, nullsFirst: true })
-      .limit(limit);
+      .limit(limit + eligibleCuratedReadingSources.length);
     throwRepositoryError(error, "load refreshable feeds");
-    return (data ?? []).map((row) => row.id);
+    return (data ?? [])
+      .filter((row) => !isCuratedOnlySourceRow(row))
+      .slice(0, limit)
+      .map((row) => row.id);
   }
 
   async listPendingArticles(limit: number): Promise<Array<Pick<ArticleRecord, "id" | "publisherUrl" | "title">>> {
-    const { data, error } = await this.client
+    const { data: possibleCuratedSources, error: sourceError } = await this.client
+      .from("feed_sources")
+      .select("id,normalized_feed_url,description")
+      .in("normalized_feed_url", eligibleCuratedReadingSources.map((source) => source.feedUrl));
+    throwRepositoryError(sourceError, "load protected curated sources");
+    const curatedSourceIds = (possibleCuratedSources ?? [])
+      .filter(isCuratedOnlySourceRow)
+      .map((source) => source.id);
+    let query = this.client
       .from("articles")
       .select("id,publisher_url,title")
-      .eq("extraction_status", "pending")
-      .limit(limit);
+      .eq("extraction_status", "pending");
+    if (curatedSourceIds.length) {
+      query = query.or(`feed_source_id.is.null,feed_source_id.not.in.(${curatedSourceIds.join(",")})`);
+    }
+    const { data, error } = await query.limit(limit);
     throwRepositoryError(error, "load pending articles");
     return (data ?? []).map((row) => ({
       id: row.id,
@@ -183,6 +336,9 @@ export class SupabaseFeedRepository implements FeedRefreshRepository {
     fingerprint: string,
     analysis: ArticleAnalysis
   ): Promise<void> {
+    if (await this.isCuratedOnlyArticle(articleId)) {
+      throw new Error("Curated-only article requires transient analysis.");
+    }
     const { error: articleError } = await this.client
       .from("articles")
       .update({
@@ -218,11 +374,27 @@ export class SupabaseFeedRepository implements FeedRefreshRepository {
   }
 
   async rejectArticle(articleId: string, errorCode: string): Promise<void> {
+    if (await this.isCuratedOnlyArticle(articleId)) return;
     const { error } = await this.client
       .from("articles")
       .update({ extraction_status: "rejected", extraction_error_code: errorCode })
       .eq("id", articleId);
     throwRepositoryError(error, "reject article");
+  }
+
+  private async isCuratedOnlyArticle(articleId: string): Promise<boolean> {
+    const { data: article, error: articleError } = await this.client.from("articles")
+      .select("feed_source_id")
+      .eq("id", articleId)
+      .maybeSingle();
+    throwRepositoryError(articleError, "load article source for analysis");
+    if (!article?.feed_source_id) return false;
+    const { data: source, error: sourceError } = await this.client.from("feed_sources")
+      .select("normalized_feed_url,description")
+      .eq("id", article.feed_source_id)
+      .maybeSingle();
+    throwRepositoryError(sourceError, "load source for analysis");
+    return source ? isCuratedOnlySourceRow(source) : false;
   }
 
   async saveImportedArticle(userId: string, article: ExtractedArticle, fingerprint: string): Promise<string> {
@@ -462,4 +634,11 @@ export class SupabaseFeedRepository implements FeedRefreshRepository {
       eligibleArticleCount: candidates.length
     };
   }
+}
+
+function isCuratedOnlySourceRow(row: { normalized_feed_url: string; description: string | null }): boolean {
+  return eligibleCuratedReadingSources.some((source) =>
+    row.normalized_feed_url === source.feedUrl
+    && (row.description === `${CURATED_SOURCE_DESCRIPTION_PREFIX}${source.key}`
+      || row.description?.endsWith(`\n${CURATED_SOURCE_DESCRIPTION_PREFIX}${source.key}`)));
 }

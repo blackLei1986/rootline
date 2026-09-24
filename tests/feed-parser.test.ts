@@ -22,6 +22,14 @@ describe("feed parser", () => {
     expect(() => parseFeed("<root><item /></root>", "https://example.com/feed"))
       .toThrowError(expect.objectContaining({ code: "INVALID_FEED" }));
   });
+
+  it("exposes channel and item language evidence for curated admission", () => {
+    const feed = parseFeed(`<?xml version="1.0"?><rss><channel><title>NASA</title><language>en-US</language>
+      <item><title>Story</title><link>https://www.nasa.gov/story</link><language>es</language></item>
+    </channel></rss>`, "https://www.nasa.gov/news-release/feed/");
+    expect(feed.language).toBe("en-US");
+    expect(feed.entries[0].language).toBe("es");
+  });
 });
 
 function readFixture(name: string) {
