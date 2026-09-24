@@ -8,12 +8,11 @@ export default defineConfig({
   reporter: [["list"]],
   use: {
     baseURL: "http://localhost:3000",
-    ...(process.env.E2E_DAILY_READING_STORAGE_STATE ? { storageState: process.env.E2E_DAILY_READING_STORAGE_STATE } : {}),
     trace: "retain-on-failure",
     screenshot: "only-on-failure"
   },
   webServer: {
-    command: "ROOTLINE_E2E_FIXTURES=1 /Users/leipan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node node_modules/next/dist/bin/next dev --webpack -p 3000",
+    command: "if [ -n \"$E2E_SUPABASE_URL\" ]; then NEXT_PUBLIC_SUPABASE_URL=\"$E2E_SUPABASE_URL\" /Users/leipan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node node_modules/next/dist/bin/next dev --webpack -p 3000; else /Users/leipan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node node_modules/next/dist/bin/next dev --webpack -p 3000; fi",
     url: "http://127.0.0.1:3000",
     reuseExistingServer: true,
     timeout: 120_000
