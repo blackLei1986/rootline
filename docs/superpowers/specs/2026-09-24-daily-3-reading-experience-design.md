@@ -1,6 +1,6 @@
 # Rootline 2.0 — Phase 2B Daily-3 Reading Experience
 
-**Status:** Design approved in conversation; awaiting written-spec review
+**Status:** Design approved in conversation and written-spec review
 **Date:** 2026-09-24
 **Base:** Phase 2A authenticated, per-user/per-learning-date Daily-3 recommendation backend
 
