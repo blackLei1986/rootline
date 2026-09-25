@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { updateCurrentDisplayName, sendCurrentUserPasswordReset } from "@/lib/auth/account";
+import { updateCurrentDisplayName, updateCurrentTimeZone, sendCurrentUserPasswordReset } from "@/lib/auth/account";
 import type { AccountSettingsState } from "@/lib/auth/account-settings-state";
 import { toAuthMessage } from "@/lib/auth/errors";
 
@@ -20,4 +20,15 @@ export async function updateDisplayNameAction(_state: AccountSettingsState, form
 
 export async function requestPasswordResetAction(): Promise<void> {
   await sendCurrentUserPasswordReset();
+}
+
+export async function updateTimeZoneAction(_state: AccountSettingsState, formData: FormData): Promise<AccountSettingsState> {
+  const timeZone = formData.get("timeZone");
+  if (typeof timeZone !== "string") return { status: "error", fieldErrors: { timeZone: ["请选择有效的学习时区。"] } };
+  try {
+    await updateCurrentTimeZone(timeZone);
+    return { status: "success", message: "学习时区已更新。" };
+  } catch (error) {
+    return { status: "error", message: error instanceof Error && error.message === "请选择有效的学习时区。" ? error.message : toAuthMessage(error) };
+  }
 }
