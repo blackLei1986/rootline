@@ -8,6 +8,13 @@ import type { ProductionVocabularyEntry } from "@/types/vocabulary";
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe("Today Reading flow", () => {
+  it("uses learner-facing loading copy without an outdated catalog size", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    render(<TodayLearningFlow />);
+    expect(screen.getByText("正在准备今日学习…")).toBeVisible();
+    expect(screen.queryByText(/9000 词/)).not.toBeInTheDocument();
+  });
+
   it("shows 今日阅读 below the Daily-30 card only in setup/complete, not during active learning", async () => {
     vi.stubGlobal("fetch", vi.fn(async (_input: string, init?: RequestInit) => ({
       ok: true,
@@ -17,6 +24,7 @@ describe("Today Reading flow", () => {
     })));
     const { unmount } = render(<Daily30Flow plan={daily30Plan()} />);
     expect(screen.getByRole("link", { name: "今日阅读" })).toHaveAttribute("href", "/reading");
+    await waitFor(() => expect(screen.getByRole("button", { name: "开始今日学习" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "开始今日学习" }));
     await waitFor(() => expect(screen.queryByRole("link", { name: "今日阅读" })).not.toBeInTheDocument());
     unmount();
