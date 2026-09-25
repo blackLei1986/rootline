@@ -1,7 +1,9 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { ForYou } from "@/components/reading/for-you";
 import type { ArticleCandidate } from "@/types/articles";
+
+afterEach(() => cleanup());
 
 describe("Reading candidate view", () => {
   it("renders at most three candidates with learning-fit details", () => {

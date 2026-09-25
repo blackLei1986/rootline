@@ -6,8 +6,7 @@ import {
   toJson,
   type DatabaseClient
 } from "@/lib/repositories/supabase/shared";
-import type { TodayPlan } from "@/types/today";
-import type { TodaySessionDTO } from "@/types/today";
+import type { DailyTargetProgressDTO, TodayPlan, TodaySessionDTO } from "@/types/today";
 import type { TodayEventInput } from "@/lib/today/events";
 
 export class SupabaseTodayRepository implements TodayRepository {
@@ -81,22 +80,60 @@ export class SupabaseTodayRepository implements TodayRepository {
   }
 
   async getSession(userId: string, planId: string): Promise<TodaySessionDTO | null> {
-    const { data, error } = await this.client
+    const [{ data, error }, targetResult] = await Promise.all([this.client
       .from("today_sessions")
-      .select("status,current_stage,outcomes")
+      .select("status,current_stage,current_block,event_revision,outcomes")
       .eq("user_id", userId)
       .eq("plan_id", planId)
-      .maybeSingle();
+      .maybeSingle(), this.client
+      .from("today_target_progress")
+      .select("target_id,block,status,current_activity,recognition_state,outcomes")
+      .eq("user_id", userId)
+      .eq("plan_id", planId)]);
     throwRepositoryError(error, "load Today session");
+    throwRepositoryError(targetResult.error, "load Today target progress");
     if (!data) return null;
-    const outcomes = data.outcomes as { completedQuestionIds?: unknown } | null;
+    const outcomes = data.outcomes as {
+      completedQuestionIds?: unknown;
+      completedTargetIds?: unknown;
+      completedMiniReviewBlocks?: unknown;
+      finalReviewComplete?: unknown;
+      reviewAccuracy?: unknown;
+      reviewAnswers?: unknown;
+    } | null;
+    const targetProgress = Object.fromEntries((targetResult.data ?? []).map((row) => [row.target_id, {
+      targetId: row.target_id,
+      block: row.block,
+      status: row.status,
+      currentActivity: row.current_activity,
+      recognitionState: row.recognition_state,
+      outcomes: row.outcomes ?? {}
+    } as DailyTargetProgressDTO]));
+    const numericArray = (value: unknown): number[] => Array.isArray(value)
+      ? value.filter((item): item is number => item === 1 || item === 2 || item === 3)
+      : [];
+    const reviewAccuracy = outcomes?.reviewAccuracy && typeof outcomes.reviewAccuracy === "object"
+      ? outcomes.reviewAccuracy as { correct: number; total: number }
+      : { correct: 0, total: 0 };
     return {
       planId,
       status: data.status,
       currentStage: data.current_stage,
       completedQuestionIds: Array.isArray(outcomes?.completedQuestionIds)
         ? outcomes.completedQuestionIds.filter((value): value is string => typeof value === "string")
-        : []
+        : [],
+      currentBlock: data.current_block === 2 || data.current_block === 3 ? data.current_block : 1,
+      completedTargetIds: Array.isArray(outcomes?.completedTargetIds)
+        ? outcomes.completedTargetIds.filter((value): value is string => typeof value === "string")
+        : [],
+      targetProgress,
+      completedMiniReviewBlocks: numericArray(outcomes?.completedMiniReviewBlocks) as Array<1 | 2 | 3>,
+      finalReviewComplete: outcomes?.finalReviewComplete === true,
+      reviewAccuracy,
+      reviewAnswers: outcomes?.reviewAnswers && typeof outcomes.reviewAnswers === "object"
+        ? outcomes.reviewAnswers as Record<string, boolean>
+        : {},
+      eventRevision: data.event_revision ?? 0
     };
   }
 

@@ -1,17 +1,17 @@
 {
-  "version": "2026.09.production-v1",
-  "generatedAt": "2026-09-17T07:24:39.841Z",
-  "target": 9000,
-  "acceptedLemmaCount": 9000,
-  "importedAcceptedLemmaCount": 9000,
+  "version": "2026.09.production-v2",
+  "generatedAt": "2026-09-23T07:08:52.048Z",
+  "target": 9750,
+  "acceptedLemmaCount": 9750,
+  "importedAcceptedLemmaCount": 9750,
   "existingAcceptedLemmaCount": 0,
-  "surfaceFormCount": 23419,
-  "wordFamilyCount": 7474,
+  "surfaceFormCount": 25022,
+  "wordFamilyCount": 8089,
   "tierCounts": {
-    "tier-1-core": 2200,
-    "tier-2-important": 2800,
-    "tier-3-recognition": 3000,
-    "tier-4-extension": 1000
+    "tier-1-core": 2384,
+    "tier-2-important": 3033,
+    "tier-3-recognition": 3250,
+    "tier-4-extension": 1083
   },
   "sources": [
     {
@@ -25,7 +25,7 @@
       "url": "https://en-word.net/"
     }
   ],
-  "rejectedBeforeAcceptance": 326808,
+  "rejectedBeforeAcceptance": 326058,
   "quality": {
     "coreMeaningCoverage": 1,
     "exampleCoverage": 1,

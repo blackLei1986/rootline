@@ -21,6 +21,7 @@ export interface NormalizedFeedEntry {
   summary: string;
   publishedAt: string | null;
   author: string | null;
+  language?: string | null;
 }
 
 export interface NormalizedFeed {
@@ -28,6 +29,7 @@ export interface NormalizedFeed {
   siteUrl: string | null;
   feedUrl: string;
   description: string | null;
+  language?: string | null;
   entries: NormalizedFeedEntry[];
 }
 

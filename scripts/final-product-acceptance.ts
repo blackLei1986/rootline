@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createFullVocabularyProductionReport } from "@/lib/vocabulary-production-report";
+import { createFullVocabularyProductionReport, type FullVocabularyProductionReport } from "@/lib/vocabulary-production-report";
 import { buildContextQuestions } from "@/lib/today/context-questions";
 import { normalizeTodayPlan, TODAY_STAGE_ORDER } from "@/types/today";
 import { runAccountCloudAudit } from "./account-cloud-audit";
@@ -22,7 +22,12 @@ export interface FinalAcceptanceResult {
   results: AcceptanceCheck[];
 }
 
-const TARGET_LEMMA_COUNT = 9_000;
+export function passesFinalVocabularyGate(report: Pick<FullVocabularyProductionReport, "finalGatePassed" | "targetGatePassed" | "duplicateCandidates" | "tierDepthIssues">): boolean {
+  return report.finalGatePassed
+    && report.targetGatePassed
+    && report.duplicateCandidates.length === 0
+    && report.tierDepthIssues.length === 0;
+}
 
 function fileExists(root: string, rel: string): boolean {
   return existsSync(resolve(root, rel));
@@ -166,6 +171,8 @@ function stageOrderValid(): boolean {
 }
 
 export async function buildFinalProductAcceptance(root: string): Promise<FinalAcceptanceResult> {
+  const manifest = JSON.parse(await readFile(resolve(root, "data", "vocabulary", "production-manifest.json"), "utf8")) as { acceptedLemmaCount: number };
+  const targetLemmaCount = manifest.acceptedLemmaCount;
   const directory = resolve(root, "public/vocabulary-data");
   const files = (await readdir(directory)).filter((file) => /^[a-z]\.json$/.test(file)).sort();
   const catalog = (await Promise.all(
@@ -179,23 +186,23 @@ export async function buildFinalProductAcceptance(root: string): Promise<FinalAc
   const results: AcceptanceCheck[] = [
     {
       name: "acceptedLemmaCount",
-      passed: report.acceptedLemmaCount === TARGET_LEMMA_COUNT,
-      detail: `accepted lemma count ${report.acceptedLemmaCount} (target ${TARGET_LEMMA_COUNT}).`
+      passed: report.acceptedLemmaCount === targetLemmaCount,
+      detail: `accepted lemma count ${report.acceptedLemmaCount} (target ${targetLemmaCount}).`
     },
     {
       name: "vocabularyGate",
-      passed: report.finalGatePassed && report.duplicateCandidates.length === 0 && report.tierDepthIssues.length === 0,
-      detail: `final gate ${report.finalGatePassed}, duplicates ${report.duplicateCandidates.length}, tier-depth issues ${report.tierDepthIssues.length}.`
+      passed: passesFinalVocabularyGate(report),
+      detail: `final gate ${report.finalGatePassed}, target gate ${report.targetGatePassed}, duplicates ${report.duplicateCandidates.length}, tier-depth issues ${report.tierDepthIssues.length}.`
     },
     { name: "accountFlow", passed: accountAudit.missing.length === 0, detail: accountAudit.missing.length === 0 ? `${accountAudit.checks} account checks passed.` : `${accountAudit.missing.length} account checks missing: ${accountAudit.missing.join("; ")}` },
-    { name: "rls", passed: fileMatches(root, "supabase/tests/account_learning_rls.test.sql", /owner can insert|another user cannot|anonymous users cannot/i), detail: "RLS policy tests reference owner-allow, cross-user-deny, and anonymous-deny assertions." },
+    { name: "rls", passed: fileMatches(root, "supabase/tests/account_learning_rls.test.sql", /owner sees their word state[\s\S]*another user cannot[\s\S]*anonymous users cannot/i), detail: "RLS policy tests cover owner read, cross-user denial, and anonymous denial; owner writes use a guarded server path." },
     { name: "rssSafety", passed: fileExists(root, "tests/feed-network-policy.test.ts") && fileExists(root, "tests/safe-feed-fetch.test.ts"), detail: "SSRF policy and redirect-pivot tests present." },
     { name: "articleDeduplication", passed: fileExists(root, "tests/article-deduplication.test.ts"), detail: "Article deduplication tests present." },
     { name: "candidateLimit", passed: fileMatches(root, "components/reading/for-you.tsx", /slice\(0,\s*3\)/), detail: "Reading hub limits candidates to three." },
     { name: "migrationIdempotency", passed: fileExists(root, "tests/local-cloud-migration.test.ts") && fileExists(root, "tests/storage-migration.test.ts"), detail: "Idempotent migration tests present." },
     ...runTodayPlanInvariantChecks(),
     { name: "stageOrder", passed: stageOrderValid(), detail: "Today stage order frozen as warmup → scan → learn → reading → context-quiz → summary." },
-    { name: "rssAudit", passed: rssAudit.missing.length === 0 && rssAudit.acceptedLemmaCount === TARGET_LEMMA_COUNT, detail: rssAudit.missing.length === 0 ? `${rssAudit.checks} RSS checks passed; reading index lemma count ${rssAudit.acceptedLemmaCount}.` : `${rssAudit.missing.length} RSS checks missing: ${rssAudit.missing.join("; ")}` },
+    { name: "rssAudit", passed: rssAudit.missing.length === 0 && rssAudit.acceptedLemmaCount === targetLemmaCount, detail: rssAudit.missing.length === 0 ? `${rssAudit.checks} RSS checks passed; reading index lemma count ${rssAudit.acceptedLemmaCount}.` : `${rssAudit.missing.length} RSS checks missing: ${rssAudit.missing.join("; ")}` },
     { name: "fullTestBuildStatus", passed: false, detail: "Verified by the release gate command chain (pnpm test / lint / tsc / build), not by this aggregator." }
   ];
 

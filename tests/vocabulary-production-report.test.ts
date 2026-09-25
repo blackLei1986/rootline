@@ -2,10 +2,21 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { words } from "@/data/words";
-import { createFullVocabularyProductionReport, createVocabularyProductionReport, passesAcceptedMinimum } from "@/lib/vocabulary-production-report";
+import { ACCEPTED_LEMMA_TARGET_MAX, createFullVocabularyProductionReport, createVocabularyProductionReport, isWithinAcceptedLemmaTarget, passesAcceptedMinimum } from "@/lib/vocabulary-production-report";
+import { computeProductionTierTargets } from "@/lib/vocabulary-production-plan";
+import { PRODUCTION_VOCABULARY_VERSION } from "@/config/vocabulary-version";
 import type { ProductionVocabularyEntry } from "@/types";
 
 describe("vocabulary production report", () => {
+  it("allows the master vocabulary target to reach approximately 10,000 accepted lemmas", () => {
+    expect(PRODUCTION_VOCABULARY_VERSION).toBe("2026.09.production-v2");
+    expect(ACCEPTED_LEMMA_TARGET_MAX).toBe(10_000);
+    expect(isWithinAcceptedLemmaTarget(8_499)).toBe(false);
+    expect(isWithinAcceptedLemmaTarget(8_500)).toBe(true);
+    expect(isWithinAcceptedLemmaTarget(9_750)).toBe(true);
+    expect(isWithinAcceptedLemmaTarget(10_001)).toBe(false);
+  });
+
   it("counts only unique accepted lemmas that pass every minimum field gate", () => {
     const accepted = words.filter(passesAcceptedMinimum);
     const report = createVocabularyProductionReport(words);
@@ -28,24 +39,24 @@ describe("vocabulary production report", () => {
       .flatMap((file) => JSON.parse(readFileSync(resolve(directory, file), "utf8")) as ProductionVocabularyEntry[]);
     const report = createFullVocabularyProductionReport(catalog);
     const searchIndex = JSON.parse(readFileSync(resolve(directory, "index.json"), "utf8")) as unknown[];
-    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "data/vocabulary/production-manifest.json"), "utf8")) as { wordFamilyCount: number };
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "data/vocabulary/production-manifest.json"), "utf8")) as { version: string; target: number; acceptedLemmaCount: number; wordFamilyCount: number };
+    const readingIndex = JSON.parse(readFileSync(resolve(process.cwd(), "data/vocabulary/reading-index.json"), "utf8")) as { vocabularyVersion: string };
 
-    expect(report.acceptedLemmaCount).toBe(9_000);
-    expect(report.totalRecords).toBe(9_000);
-    expect(report.totalLemmas).toBe(9_000);
+    expect(manifest.version).toBe(PRODUCTION_VOCABULARY_VERSION);
+    expect(readingIndex.vocabularyVersion).toBe(PRODUCTION_VOCABULARY_VERSION);
+    expect(manifest.target).toBeGreaterThanOrEqual(8_500);
+    expect(manifest.target).toBeLessThanOrEqual(ACCEPTED_LEMMA_TARGET_MAX);
+    expect(report.acceptedLemmaCount).toBe(manifest.acceptedLemmaCount);
+    expect(report.totalRecords).toBe(manifest.acceptedLemmaCount);
+    expect(report.totalLemmas).toBe(manifest.acceptedLemmaCount);
     expect(report.totalWordFamilies).toBe(manifest.wordFamilyCount);
     expect(report.totalWordFamilies).toBeLessThan(report.totalLemmas);
-    expect(Object.values(report.tierCounts).reduce((sum, count) => sum + count, 0)).toBe(9_000);
-    expect(report.tierCounts).toEqual({
-      "tier-1-core": 2_200,
-      "tier-2-important": 2_800,
-      "tier-3-recognition": 3_000,
-      "tier-4-extension": 1_000
-    });
+    expect(Object.values(report.tierCounts).reduce((sum, count) => sum + count, 0)).toBe(manifest.acceptedLemmaCount);
+    expect(report.tierCounts).toEqual(computeProductionTierTargets(manifest.target));
     expect(report.needsReview).toEqual([]);
     expect(report.duplicateCandidates).toEqual([]);
     expect(report.tierDepthIssues).toEqual([]);
-    expect(searchIndex).toHaveLength(9_000);
+    expect(searchIndex).toHaveLength(manifest.acceptedLemmaCount);
     expect(report.finalGatePassed).toBe(true);
     expect(report.targetGatePassed).toBe(true);
   });

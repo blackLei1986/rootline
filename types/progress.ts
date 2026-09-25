@@ -63,6 +63,8 @@ export interface CalibrationProfile {
 
 export interface WordProgress {
   wordId: string;
+  /** Server Reading answer revision; absent legacy snapshots are revision zero. */
+  readingRevision?: number;
   status: LearningStatus;
   recognitionState: RecognitionState | null;
   recognitionConfidence: number;
@@ -136,6 +138,8 @@ export interface DailyStats {
 
 export interface LearningStorage {
   version: number;
+  /** Locally credited server-accepted Today operation IDs, persisted with SRS state. */
+  appliedTodayOperations?: Record<string, true>;
   words: Record<string, WordProgress>;
   roots: Record<string, RootProgress>;
   dailyStats: Record<string, DailyStats>;

@@ -7,6 +7,10 @@ export const ACCEPTED_LEMMA_MINIMUM = CONTENT_QUALITY_GATES.acceptedLemmaMinimum
 export const ACCEPTED_LEMMA_TARGET_MIN = CONTENT_QUALITY_GATES.acceptedLemmaTargetMinimum;
 export const ACCEPTED_LEMMA_TARGET_MAX = CONTENT_QUALITY_GATES.acceptedLemmaTargetMaximum;
 
+export function isWithinAcceptedLemmaTarget(count: number): boolean {
+  return count >= ACCEPTED_LEMMA_TARGET_MIN && count <= ACCEPTED_LEMMA_TARGET_MAX;
+}
+
 const tiers: ContentTier[] = ["tier-1-core", "tier-2-important", "tier-3-recognition", "tier-4-extension"];
 
 export interface VocabularyProductionReport {
@@ -151,7 +155,7 @@ export function createFullVocabularyProductionReport(catalog: ProductionVocabula
     duplicateCandidates: [...groups.entries()].filter(([, entries]) => entries.length > 1).map(([lemma]) => lemma),
     tierDepthIssues,
     finalGatePassed: acceptedLemmaCount >= ACCEPTED_LEMMA_MINIMUM,
-    targetGatePassed: acceptedLemmaCount >= ACCEPTED_LEMMA_TARGET_MIN && acceptedLemmaCount <= ACCEPTED_LEMMA_TARGET_MAX
+    targetGatePassed: isWithinAcceptedLemmaTarget(acceptedLemmaCount)
   };
 }
 
@@ -193,6 +197,6 @@ export function createVocabularyProductionReport(catalog: Word[] = masterWords):
     duplicateCandidates: [...lemmaGroups.entries()].filter(([, wordIds]) => wordIds.length > 1).map(([lemma, wordIds]) => ({ lemma, wordIds })),
     brokenReferences,
     finalGatePassed: acceptedLemmaCount >= ACCEPTED_LEMMA_MINIMUM,
-    targetGatePassed: acceptedLemmaCount >= ACCEPTED_LEMMA_TARGET_MIN && acceptedLemmaCount <= ACCEPTED_LEMMA_TARGET_MAX
+    targetGatePassed: isWithinAcceptedLemmaTarget(acceptedLemmaCount)
   };
 }

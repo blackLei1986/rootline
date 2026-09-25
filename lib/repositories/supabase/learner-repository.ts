@@ -67,25 +67,14 @@ export class SupabaseLearnerRepository implements LearnerRepository {
     state: WordProgress,
     operationId: string
   ): Promise<void> {
-    if (await operationWasApplied(this.client, userId, operationId)) return;
-
-    const { error } = await this.client.from("word_learning_states").upsert(
-      {
-        user_id: userId,
-        word_id: state.wordId,
-        state: toJson(state),
-        version: 1,
-        client_updated_at: new Date().toISOString()
-      },
-      { onConflict: "user_id,word_id" }
-    );
-    throwRepositoryError(error, "save word state");
-    await recordOperation(this.client, {
-      userId,
-      operationId,
-      kind: "word-state",
-      entityId: state.wordId
+    const { error } = await this.client.rpc("apply_guarded_word_state", {
+      p_user_id: userId,
+      p_operation_id: operationId,
+      p_entity_id: state.wordId,
+      p_version: 1,
+      p_payload: toJson(state)
     });
+    throwRepositoryError(error, "save word state");
   }
 
   async appendEvents(userId: string, events: LearningEvent[]): Promise<number> {

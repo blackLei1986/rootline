@@ -34,6 +34,7 @@ function parseRss(rss: Record<string, unknown>, sourceUrl: string): NormalizedFe
     siteUrl: optionalUrl(text(channel.link), sourceUrl),
     feedUrl: new URL(sourceUrl).toString(),
     description: optionalText(channel.description),
+    language: optionalText(channel.language ?? channel.lang),
     entries
   };
 }
@@ -50,6 +51,7 @@ function parseAtom(feed: Record<string, unknown>, sourceUrl: string): Normalized
     siteUrl: optionalUrl(text(alternate?.href), sourceUrl),
     feedUrl: new URL(sourceUrl).toString(),
     description: optionalText(feed.subtitle),
+    language: optionalText(feed.lang ?? feed.language),
     entries
   };
 }
@@ -67,7 +69,8 @@ function normalizeRssEntry(
     title,
     summary: optionalText(item.description) ?? "",
     publishedAt: isoDate(item.pubDate),
-    author: optionalText(item.author ?? item.creator)
+    author: optionalText(item.author ?? item.creator),
+    language: optionalText(item.language ?? item.lang)
   };
 }
 
@@ -87,7 +90,8 @@ function normalizeAtomEntry(
     title,
     summary: optionalText(item.summary ?? item.content) ?? "",
     publishedAt: isoDate(item.published ?? item.updated),
-    author: optionalText(author.name)
+    author: optionalText(author.name),
+    language: optionalText(item.lang ?? item.language)
   };
 }
 

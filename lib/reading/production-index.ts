@@ -35,7 +35,10 @@ export function getProductionReadingIndex(): Promise<ProductionReadingIndex> {
 
 async function loadIndex(): Promise<ProductionReadingIndex> {
   const path = resolve(process.cwd(), "data", "vocabulary", "reading-index.json");
-  const serialized = JSON.parse(await readFile(path, "utf8")) as SerializedIndex;
+  const manifestPath = resolve(process.cwd(), "data", "vocabulary", "production-manifest.json");
+  const [serializedText, manifestText] = await Promise.all([readFile(path, "utf8"), readFile(manifestPath, "utf8")]);
+  const serialized = JSON.parse(serializedText) as SerializedIndex;
+  const manifest = JSON.parse(manifestText) as { acceptedLemmaCount: number };
   const byLemma = new Map<string, ProductionReadingEntry>();
   const bySurfaceForm = new Map<string, ProductionReadingEntry>();
 
@@ -49,7 +52,7 @@ async function loadIndex(): Promise<ProductionReadingIndex> {
       if (!current || entry.frequencyRank < current.frequencyRank) bySurfaceForm.set(form, entry);
     }
   }
-  if (serialized.acceptedLemmaCount !== 9_000 || byLemma.size !== serialized.acceptedLemmaCount) {
+  if (serialized.acceptedLemmaCount !== manifest.acceptedLemmaCount || byLemma.size !== serialized.acceptedLemmaCount) {
     throw new Error("Production Reading index failed the accepted lemma count gate.");
   }
   return {

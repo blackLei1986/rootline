@@ -31,17 +31,26 @@ export interface SafeTextResponse {
   lastModified: string | null;
 }
 
+export interface SafeFetchPolicy {
+  allowedHostname: (hostname: string) => boolean;
+  requireHttps?: boolean;
+}
+
 export async function safeFetchText(
   url: string,
   kind: FetchKind,
   dependencies?: SafeFetchDeps,
-  conditionalHeaders: { etag?: string | null; lastModified?: string | null } = {}
+  conditionalHeaders: { etag?: string | null; lastModified?: string | null } = {},
+  policy?: SafeFetchPolicy
 ): Promise<SafeTextResponse> {
   const deps = dependencies ?? defaultDependencies();
   let current = parseUrl(url);
   let redirects = 0;
 
   while (true) {
+    if (policy && (!policy.allowedHostname(current.hostname) || (policy.requireHttps && current.protocol !== "https:"))) {
+      throw new FeedNetworkError("BLOCKED_ADDRESS", "Remote host is outside the reviewed publisher.");
+    }
     await assertPublicHttpUrl(current, deps.resolver);
     const response = await deps.fetchImpl(current, {
       method: "GET",

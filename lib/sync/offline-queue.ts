@@ -4,6 +4,7 @@ import type { FlushResult, SyncOperation } from "@/types/sync";
 export const SYNC_QUEUE_KEY = "rootline-sync-queue";
 export const SYNC_QUEUE_EVENT = "rootline-sync-queue-updated";
 const MAX_QUEUE_LENGTH = 2_000;
+const activeFlushes = new WeakMap<StorageAdapter, Promise<FlushResult>>();
 
 type SyncTransport = (operation: SyncOperation) => Promise<void>;
 
@@ -12,6 +13,10 @@ type FlushOptions = {
   transport?: SyncTransport;
   now?: () => Date;
 };
+
+export class SyncConflictError extends Error {
+  constructor(message = "READING_REVISION_CONFLICT") { super(message); }
+}
 
 export function enqueueSyncOperation(
   operation: SyncOperation,
@@ -70,7 +75,45 @@ export function readSyncQueue(
   }
 }
 
+export function listPendingWordOperations(
+  wordId: string, adapter: StorageAdapter = getStorageAdapter()
+): SyncOperation[] {
+  return readSyncQueue(adapter).filter((operation) =>
+    (operation.kind === "word-state" && operation.entityId === wordId)
+    || (operation.kind === "learning-event" && typeof operation.payload === "object"
+      && operation.payload !== null && "wordId" in operation.payload
+      && operation.payload.wordId === wordId));
+}
+
+export function discardConflictingWordStateOperation(
+  operationId: string, wordId: string, adapter: StorageAdapter = getStorageAdapter()
+): boolean {
+  const queue = readSyncQueue(adapter);
+  const operation = queue.find((item) => item.id === operationId);
+  if (operation?.kind !== "word-state" || operation.entityId !== wordId) return false;
+  writeSyncQueue(queue.filter((item) => item.id !== operationId), adapter);
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(SYNC_QUEUE_EVENT));
+  return true;
+}
+
 export async function flushSyncQueue(options: FlushOptions = {}): Promise<FlushResult> {
+  const adapter = options.adapter ?? getStorageAdapter();
+  const active = activeFlushes.get(adapter);
+  if (active) return active;
+  const run = flushWithBrowserLock(() => flushSyncQueueUnlocked({...options, adapter}));
+  activeFlushes.set(adapter, run);
+  try { return await run; }
+  finally { if (activeFlushes.get(adapter) === run) activeFlushes.delete(adapter); }
+}
+
+async function flushWithBrowserLock(run: () => Promise<FlushResult>): Promise<FlushResult> {
+  if (typeof navigator !== "undefined" && navigator.locks?.request) {
+    return navigator.locks.request(SYNC_QUEUE_KEY, run);
+  }
+  return run();
+}
+
+async function flushSyncQueueUnlocked(options: FlushOptions): Promise<FlushResult> {
   const adapter = options.adapter ?? getStorageAdapter();
   const transport = options.transport ?? sendOperation;
   const now = options.now ?? (() => new Date());
@@ -78,12 +121,19 @@ export async function flushSyncQueue(options: FlushOptions = {}): Promise<FlushR
   let applied = 0;
 
   while (queue.length > 0) {
+    const operation = queue[0];
     try {
-      await transport(queue[0]);
-      queue = queue.slice(1);
+      await transport(operation);
+      queue = readSyncQueue(adapter).filter((item) => item.id !== operation.id);
       writeSyncQueue(queue, adapter);
       applied += 1;
-    } catch {
+    } catch (error) {
+      queue = readSyncQueue(adapter);
+      if (error instanceof SyncConflictError) {
+        if (!queue.some((item) => item.id === operation.id)) continue;
+        return { applied, remaining: queue.length, retryAt: null,
+          conflict: {operationId: operation.id, entityId: operation.entityId} };
+      }
       return {
         applied,
         remaining: queue.length,
@@ -92,7 +142,7 @@ export async function flushSyncQueue(options: FlushOptions = {}): Promise<FlushR
     }
   }
 
-  return { applied, remaining: 0, retryAt: null };
+  return { applied, remaining: readSyncQueue(adapter).length, retryAt: null };
 }
 
 function writeSyncQueue(queue: SyncOperation[], adapter: StorageAdapter): void {
@@ -105,5 +155,9 @@ async function sendOperation(operation: SyncOperation): Promise<void> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(operation)
   });
+  if (response.status === 409) {
+    const body = await response.json().catch(() => null) as {code?: string} | null;
+    if (body?.code === "READING_REVISION_CONFLICT") throw new SyncConflictError();
+  }
   if (!response.ok) throw new Error("Sync operation failed.");
 }

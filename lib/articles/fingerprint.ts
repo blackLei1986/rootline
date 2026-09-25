@@ -11,6 +11,10 @@ export function fingerprintArticle(article: Pick<ExtractedArticle, "title" | "te
   return createHash("sha256").update(normalized).digest("hex");
 }
 
+export function fingerprintArticleContent(text: string): string {
+  return createHash("sha256").update(text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim()).digest("hex");
+}
+
 export function chooseArticleIdentity(input: {
   publisherUrl: string;
   canonicalUrl: string | null;

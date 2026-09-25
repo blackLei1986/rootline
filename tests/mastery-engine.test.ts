@@ -3,6 +3,14 @@ import { calculateMasterySummary, calculateRetention, calculateWordMastery } fro
 import { createWordProgress, migrateStorage } from "@/lib/storage";
 
 describe("mastery engine", () => {
+  it("counts correct Reading Cloze/Recall as active but not Reading recognition", () => {
+    const progress = {...createWordProgress("adapt"), knownCount: 1};
+    const event = (mode: string) => [{id: mode, type: "quiz_correct" as const,
+      timestamp: "2026-09-25T12:00:00Z", wordId: "adapt", metadata: {mode}}];
+    expect(calculateWordMastery("adapt", progress, event("reading-recognition")).active).toBe(false);
+    expect(calculateWordMastery("adapt", progress, event("reading-cloze")).active).toBe(true);
+    expect(calculateWordMastery("adapt", progress, event("reading-recall")).active).toBe(true);
+  });
   it("does not turn a one-time known signal into stable mastery", () => {
     const progress = { ...createWordProgress("alpha"), knownCount: 1, recognitionState: "known" as const, firstLearnedAt: "2026-09-17T00:00:00Z" };
     const mastery = calculateWordMastery("alpha", progress, [], new Date("2026-09-17T12:00:00Z"));

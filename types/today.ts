@@ -36,6 +36,36 @@ export interface TodayPlan {
   contextQuestions: ContextQuestion[];
   stages: TodayStage[];
   degradationReason: string | null;
+  dailyTargets?: DailyTargetSnapshot[];
+}
+
+export type DailyTargetSource = "carryover" | "weak" | "root-core" | "support";
+export type DailyTargetOriginSource = Exclude<DailyTargetSource, "carryover" | "weak">;
+
+export interface DailyTargetSnapshot {
+  wordId: string;
+  word: string;
+  lemma: string;
+  coreMeaningZh: string;
+  coreDefinitionEn: string;
+  phonetic?: string;
+  partOfSpeech: string[];
+  example: string;
+  examples: string[];
+  source: DailyTargetSource;
+  originSource?: DailyTargetOriginSource;
+  rootId: string | null;
+  rootForm: string | null;
+  rootMeaningEn: string[];
+  rootMeaningZh: string[];
+  rootExplanation: string | null;
+  familyId: string | null;
+  morphology: {
+    segments: Array<{ kind: "prefix" | "root" | "suffix"; surfaceForm: string; rootId?: string; meaning?: string; explanation?: string }>;
+    formationExplanation: string;
+  } | null;
+  block: 1 | 2 | 3;
+  position: number;
 }
 
 export interface TodayPlanDTO extends Omit<TodayPlan, "article"> {
@@ -48,6 +78,23 @@ export interface TodaySessionDTO {
   status: TodayPlanStatus;
   currentStage: string;
   completedQuestionIds: string[];
+  currentBlock?: 1 | 2 | 3;
+  completedTargetIds?: string[];
+  targetProgress?: Record<string, DailyTargetProgressDTO>;
+  completedMiniReviewBlocks?: Array<1 | 2 | 3>;
+  finalReviewComplete?: boolean;
+  reviewAccuracy?: { correct: number; total: number };
+  reviewAnswers?: Record<string, boolean>;
+  eventRevision?: number;
+}
+
+export interface DailyTargetProgressDTO {
+  targetId: string;
+  block: 1 | 2 | 3;
+  status: "not-started" | "active" | "complete";
+  currentActivity: "recognition" | "learning-card" | "association" | "cloze" | "recall" | null;
+  recognitionState: "known" | "fuzzy" | "unknown" | null;
+  outcomes: Partial<Record<"association" | "cloze" | "recall", boolean>>;
 }
 
 export function normalizeTodayPlan(value: unknown): TodayPlan {
@@ -55,6 +102,17 @@ export function normalizeTodayPlan(value: unknown): TodayPlan {
   if (Array.isArray(input.article)) throw new Error("Today plan supports at most one article.");
   const article = input.article == null ? null : normalizeArticle(input.article);
   const questions = Array.isArray(input.contextQuestions) ? input.contextQuestions.map(normalizeQuestion) : [];
+  const dailyTargets = Array.isArray(input.dailyTargets) ? input.dailyTargets.map(normalizeDailyTarget) : undefined;
+  if (dailyTargets && dailyTargets.length > 30) throw new Error("Today plan supports at most 30 daily targets.");
+  if (dailyTargets && new Set(dailyTargets.map((target) => target.wordId)).size !== dailyTargets.length) {
+    throw new Error("Today plan contains duplicate daily target IDs.");
+  }
+  if (dailyTargets && new Set(dailyTargets.map((target) => target.lemma.trim().toLocaleLowerCase("en-US"))).size !== dailyTargets.length) {
+    throw new Error("Today plan contains duplicate daily target lemmas.");
+  }
+  if (dailyTargets?.some((target, index) => target.position !== index || target.block !== (Math.floor(index / 10) + 1))) {
+    throw new Error("Today plan daily target positions and blocks are invalid.");
+  }
   if (new Set(questions.map((question) => question.id)).size !== questions.length) {
     throw new Error("Today plan contains duplicate question IDs.");
   }
@@ -78,8 +136,63 @@ export function normalizeTodayPlan(value: unknown): TodayPlan {
     mix: normalizeMix(input.mix),
     article,
     contextQuestions: questions,
-    stages: article ? [...TODAY_STAGE_ORDER] : ["warmup", "scan", "learn", "summary"],
-    degradationReason: typeof input.degradationReason === "string" ? input.degradationReason : null
+    stages: dailyTargets ? ["learn", "summary"] : article ? [...TODAY_STAGE_ORDER] : ["warmup", "scan", "learn", "summary"],
+    degradationReason: typeof input.degradationReason === "string" ? input.degradationReason : null,
+    ...(dailyTargets ? { dailyTargets } : {})
+  };
+}
+
+function normalizeDailyTarget(value: unknown): DailyTargetSnapshot {
+  const input = record(value);
+  const source = input.source;
+  if (source !== "carryover" && source !== "weak" && source !== "root-core" && source !== "support") {
+    throw new Error("Today plan daily target source is invalid.");
+  }
+  const morphologyInput = input.morphology == null ? null : record(input.morphology);
+  const segments = morphologyInput && Array.isArray(morphologyInput.segments)
+    ? morphologyInput.segments.map((rawSegment) => {
+      const segment = record(rawSegment);
+      if (segment.kind !== "prefix" && segment.kind !== "root" && segment.kind !== "suffix") {
+        throw new Error("Today plan morphology segment is invalid.");
+      }
+      return {
+        kind: segment.kind as "prefix" | "root" | "suffix",
+        surfaceForm: text(segment.surfaceForm),
+        ...(typeof segment.rootId === "string" ? { rootId: segment.rootId } : {}),
+        ...(typeof segment.meaning === "string" ? { meaning: segment.meaning } : {}),
+        ...(typeof segment.explanation === "string" ? { explanation: segment.explanation } : {})
+      };
+    }) : [];
+  const morphology = morphologyInput ? {
+    segments,
+    formationExplanation: text(morphologyInput.formationExplanation)
+  } : null;
+  if (source === "support" && (morphology || input.rootId || input.familyId)) {
+    throw new Error("Support targets cannot include unverified morphology data.");
+  }
+  const block = input.block;
+  if (block !== 1 && block !== 2 && block !== 3) throw new Error("Today plan daily target block is invalid.");
+  return {
+    wordId: text(input.wordId),
+    word: text(input.word),
+    lemma: text(input.lemma),
+    coreMeaningZh: text(input.coreMeaningZh),
+    coreDefinitionEn: text(input.coreDefinitionEn),
+    ...(typeof input.phonetic === "string" ? { phonetic: input.phonetic } : {}),
+    partOfSpeech: stringArray(input.partOfSpeech),
+    example: text(input.example),
+    examples: stringArray(input.examples),
+    source,
+    ...(input.originSource === "root-core" || input.originSource === "support" ? { originSource: input.originSource } : {}),
+    rootId: typeof input.rootId === "string" ? input.rootId : null,
+    rootForm: typeof input.rootForm === "string" ? input.rootForm : null,
+    rootMeaningEn: stringArray(input.rootMeaningEn),
+    rootMeaningZh: stringArray(input.rootMeaningZh),
+    rootExplanation: typeof input.rootExplanation === "string" ? input.rootExplanation : null,
+    familyId: typeof input.familyId === "string" ? input.familyId : null,
+    morphology,
+    block,
+    position: nonnegativeInteger(input.position, -1)
   };
 }
 

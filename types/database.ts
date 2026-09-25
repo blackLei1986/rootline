@@ -33,7 +33,26 @@ export interface Database {
         word_id: string;
         state: Json;
         version: number;
+        state_revision: number;
         client_updated_at: string | null;
+      }>;
+      progress_vocabulary_snapshots: TableDefinition<{
+        user_id: string;
+        learning_date: string;
+        stable_count: number;
+        catalog_version: string;
+        captured_at: string;
+      }, "user_id" | "learning_date" | "stable_count" | "catalog_version">;
+      reading_reinforcement_sessions: TableDefinition<UserOwnedRow & {
+        id: string;
+        article_id: string;
+        learning_date: string;
+        status: "active" | "complete";
+        revision: number;
+        cursor: number;
+        questions: Json;
+        outcomes: Json;
+        completed_at: string | null;
       }>;
       learner_auxiliary_state: TableDefinition<UserOwnedRow & {
         root_progress: Json;
@@ -94,9 +113,22 @@ export interface Database {
         plan_id: string;
         status: "active" | "complete";
         current_stage: string;
+        current_block: number;
+        event_revision: number;
         actual_seconds: number;
         outcomes: Json;
         started_at: string;
+        completed_at: string | null;
+      }>;
+      today_target_progress: TableDefinition<UserOwnedRow & {
+        id: string;
+        plan_id: string;
+        target_id: string;
+        block: number;
+        status: "not-started" | "active" | "complete";
+        current_activity: "recognition" | "learning-card" | "association" | "cloze" | "recall" | null;
+        recognition_state: "known" | "fuzzy" | "unknown" | null;
+        outcomes: Json;
         completed_at: string | null;
       }>;
       reading_documents: TableDefinition<UserOwnedRow & {
@@ -229,6 +261,49 @@ export interface Database {
         started_at: string;
         completed_at: string | null;
       }>;
+      daily_reading_recommendation_sets: TableDefinition<{
+        user_id: string;
+        learning_date: string;
+        algorithm_version: string;
+        generated_at: string;
+        recommendations: Json;
+      }, "user_id" | "learning_date" | "algorithm_version" | "recommendations">;
+      morphology_datasets: TableDefinition<{
+        id: string; version: string; kind: "gold" | "candidate-source"; status: "draft" | "published" | "archived";
+        source: string; provenance: Json; created_at: string; published_at: string | null;
+      }>;
+      morphology_roots: TableDefinition<{
+        id: string; dataset_id: string; root_key: string; meaning_en: Json; meaning_zh: Json;
+        educational_content: Json; provenance: Json; created_at: string;
+      }>;
+      morphology_root_variants: TableDefinition<{
+        id: string; dataset_id: string; canonical_root_id: string; variant_form: string;
+        relation: "historical" | "pedagogical"; explanation: string; provenance: Json; created_at: string;
+      }>;
+      morphology_families: TableDefinition<{
+        id: string; dataset_id: string; primary_root_id: string | null; family_key: string; display_name: string;
+        formation_explanation: string | null; source: string; provenance: Json; created_at: string;
+      }>;
+      word_morphology_records: TableDefinition<SharedRow & {
+        dataset_id: string; catalog_word_id: string; word: string; lemma: string; legacy_word_uuid: string | null;
+        family_id: string | null; primary_root_id: string | null; confidence: "verified" | "derived" | "none";
+        morphology_score: number | null; source: string; provenance: Json; formation_explanation: string | null;
+        morphology_expression: string; literal_meaning: string;
+        review_status: "pending" | "approved" | "rejected"; revision: number; reviewed_at: string | null; reviewed_by: string | null;
+      }>;
+      word_morphology_segments: TableDefinition<{
+        id: string; word_morphology_record_id: string; position: number; kind: "prefix" | "root" | "suffix";
+        surface_form: string; normalized_form: string; root_id: string | null; meaning: string | null;
+        explanation: string | null; provenance: Json;
+      }>;
+      morphology_review_events: TableDefinition<{
+        id: string; record_id: string | null; entity_type: "dataset" | "word-record" | "root-variant"; entity_id: string;
+        word_id: string | null;
+        action: "gold-import" | "derived-create" | "approve" | "edit" | "reject" | "re-import" | "version-change" | "reopen" | "import" | "root-variant-import";
+        actor_id: string | null; actor: string | null; previous_snapshot: Json | null; result_snapshot: Json;
+        reason: string | null; dataset_version: string; source: string; metadata: Json;
+        idempotency_key: string | null; created_at: string;
+      }>;
     };
     Views: {
       article_catalog: {
@@ -251,6 +326,47 @@ export interface Database {
       };
     };
     Functions: {
+      progress_word_state_snapshot: {
+        Args: {p_user_id: string};
+        Returns: Json;
+      };
+      progress_passive_word_ids: {
+        Args: {p_user_id: string};
+        Returns: {word_id: string}[];
+      };
+      progress_record_stable_snapshot: {
+        Args: {p_user_id: string; p_learning_date: string; p_stable_count: number;
+          p_catalog_version: string; p_observed_at: string};
+        Returns: boolean;
+      };
+      apply_guarded_word_state: {
+        Args: {
+          p_user_id: string;
+          p_operation_id: string;
+          p_entity_id: string;
+          p_version: number;
+          p_payload: Json;
+        };
+        Returns: boolean;
+      };
+      apply_reading_answer: {
+        Args: {
+          p_user_id: string;
+          p_session_id: string;
+          p_question_id: string;
+          p_expected_session_revision: number;
+          p_word_id: string;
+          p_expected_reading_revision: number;
+          p_expected_word_revision: number;
+          p_event_id: string;
+          p_submitted_answer: string;
+          p_correct: boolean;
+          p_event_type: string;
+          p_event_payload: Json;
+          p_next_state: Json;
+        };
+        Returns: Json;
+      };
       create_today_plan: {
         Args: {
           p_user_id: string;
@@ -299,6 +415,24 @@ export interface Database {
           p_payload: Json;
         };
         Returns: boolean;
+      };
+      apply_morphology_review: {
+        Args: {
+          p_record_id: string;
+          p_expected_revision: number;
+          p_action: string;
+          p_actor_id: string;
+          p_reason: string | null;
+          p_segments: Json | null;
+        };
+        Returns: Json;
+      };
+      apply_morphology_import: {
+        Args: {
+          p_plan: Json;
+          p_actor: string;
+        };
+        Returns: Json;
       };
     };
     Enums: Record<string, never>;

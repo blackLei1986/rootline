@@ -1,12 +1,47 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { TodayLearningFlow } from "@/components/today-learning-flow";
+import { Daily30Flow } from "@/components/today/daily-30-flow";
 import type { TodayPlanDTO } from "@/types/today";
 import type { ProductionVocabularyEntry } from "@/types/vocabulary";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe("Today Reading flow", () => {
+  it("uses learner-facing loading copy without an outdated catalog size", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    render(<TodayLearningFlow />);
+    expect(screen.getByText("正在准备今日学习…")).toBeVisible();
+    expect(screen.queryByText(/9000 词/)).not.toBeInTheDocument();
+  });
+
+  it("hides backend errors and offers a Today retry", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {throw new Error("RPC private database detail");}));
+    render(<TodayLearningFlow />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("今日计划暂时无法加载");
+    expect(screen.getByRole("link", {name: "重试"})).toHaveAttribute("href", "/today");
+    expect(screen.queryByText(/RPC private database detail/)).not.toBeInTheDocument();
+  });
+
+  it("shows 今日阅读 below the Daily-30 card only in setup/complete, not during active learning", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (_input: string, init?: RequestInit) => ({
+      ok: true,
+      json: async () => init?.method === "POST"
+        ? { status: "active", eventRevision: 1, currentBlock: 1, completedTargetIds: [], targetProgress: {} }
+        : { status: "not-started", eventRevision: 0, currentBlock: 1, completedTargetIds: [], targetProgress: {} }
+    })));
+    const { unmount } = render(<Daily30Flow plan={daily30Plan()} />);
+    expect(screen.getByRole("link", { name: "今日阅读" })).toHaveAttribute("href", "/reading");
+    await waitFor(() => expect(screen.getByRole("button", { name: "开始今日学习" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "开始今日学习" }));
+    await waitFor(() => expect(screen.queryByRole("link", { name: "今日阅读" })).not.toBeInTheDocument());
+    unmount();
+
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ status: "complete", eventRevision: 2, currentBlock: 1, completedTargetIds: ["target-1"], targetProgress: { "target-1": { outcomes: {}, recognitionState: "known" } } }) })));
+    render(<Daily30Flow plan={daily30Plan()} />);
+    expect(await screen.findByRole("link", { name: "今日阅读" })).toHaveAttribute("href", "/reading");
+  });
+
   it("shows the 15 / 30 / 7 / 1 / 5 plan and opens Reading before context questions", () => {
     render(<TodayLearningFlow initialPlan={planWithArticle()} onEvent={vi.fn()} />);
 
@@ -86,6 +121,14 @@ function planWithArticle(): TodayPlanDTO {
     })),
     stages: ["warmup", "scan", "learn", "reading", "context-quiz", "summary"],
     degradationReason: null
+  };
+}
+
+function daily30Plan(): TodayPlanDTO {
+  const base = planWithArticle();
+  return {
+    ...base,
+    dailyTargets: [{ wordId: "target-1", word: "adapt", lemma: "adapt", coreMeaningZh: "适应", coreDefinitionEn: "adjust", partOfSpeech: ["verb"], example: "Adapt.", examples: ["Adapt."], source: "support", rootId: null, rootForm: null, rootMeaningEn: [], rootMeaningZh: [], rootExplanation: null, familyId: null, morphology: null, block: 1, position: 0 }]
   };
 }
 

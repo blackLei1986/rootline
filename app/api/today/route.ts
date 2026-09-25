@@ -3,11 +3,13 @@ import { requireVerifiedViewerHttp } from "@/lib/auth/http";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createProductionTodayService } from "@/lib/today/server-service";
 import { getE2ETodayPlan } from "@/lib/today/e2e-fixture";
+import {isLocalTodayFixtureEnabled} from "@/lib/today/fixture-env";
+import { learningDateForTimeZone } from "@/lib/today/local-date";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  if (process.env.ROOTLINE_E2E_FIXTURES === "1") {
+  if (isLocalTodayFixtureEnabled(process.env)) {
     return NextResponse.json(getE2ETodayPlan(), { headers: { "cache-control": "private, no-store" } });
   }
   const viewer = await requireVerifiedViewerHttp();
@@ -17,28 +19,12 @@ export async function GET() {
   return NextResponse.json(plan, { headers: { "cache-control": "private, no-store" } });
 }
 
-export async function POST() {
-  if (process.env.ROOTLINE_E2E_FIXTURES === "1") {
-    return NextResponse.json(getE2ETodayPlan(), { headers: { "cache-control": "private, no-store" } });
-  }
-  const viewer = await requireVerifiedViewerHttp();
-  if (viewer instanceof NextResponse) return viewer;
-  const now = new Date();
-  const learningDate = await getLearningDate(viewer.userId, now);
-  const plan = await createProductionTodayService().regenerateUnstartedTodayPlan(viewer.userId, learningDate, now);
-  return NextResponse.json(plan, { headers: { "cache-control": "private, no-store" } });
-}
-
 async function getLearningDate(userId: string, now: Date): Promise<string> {
   const client = createAdminSupabaseClient();
   const { data } = await client.from("profiles").select("timezone").eq("user_id", userId).maybeSingle();
-  const timeZone = data?.timezone ?? "Asia/Shanghai";
-  const parts = new Intl.DateTimeFormat("en", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(now);
-  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${value.year}-${value.month}-${value.day}`;
+  try {
+    return learningDateForTimeZone(now, data?.timezone ?? "Asia/Shanghai");
+  } catch {
+    return learningDateForTimeZone(now, "Asia/Shanghai");
+  }
 }

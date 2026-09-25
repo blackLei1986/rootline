@@ -1,0 +1,52 @@
+import "server-only";
+import { createProductionDailyReadingArticleService } from "@/lib/reading/server-daily-reading-article-service";
+import { createProductionDailyReadingRecommendationsService } from "@/lib/reading/server-recommendations";
+import { loadProductionVocabulary } from "@/lib/today/server-service";
+import { SupabaseTodayRepository } from "@/lib/repositories/supabase/today-repository";
+import { createProductionReadingReinforcementService } from "@/lib/reading/reinforcement/server";
+import { SupabaseDailyReadingMorphologyRepository } from "@/lib/repositories/supabase/daily-reading-morphology-repository";
+import { buildSummaryTokens } from "@/lib/reading/daily-reading-highlights";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import type { DailyReadingArticleState, DailyReadingArticleWord } from "@/components/reading/daily-reading-article";
+import type { ReinforcementAvailability } from "@/lib/reading/reinforcement/service";
+
+export async function loadDailyReadingArticlePageData(userId: string, articleId: string): Promise<{ article: NonNullable<Awaited<ReturnType<ReturnType<typeof createProductionDailyReadingArticleService>["getArticle"]>>>; words: DailyReadingArticleWord[]; summaryTokens: ReturnType<typeof buildSummaryTokens>; initialState: DailyReadingArticleState; reinforcement: ReinforcementAvailability | null } | null> {
+  const articleService = createProductionDailyReadingArticleService();
+  const article = await articleService.getArticle(userId, articleId);
+  if (!article) return null;
+  const initialState = await articleService.getState(userId, articleId);
+  if (!initialState) return null;
+  const recommendations = await createProductionDailyReadingRecommendationsService().getForToday(userId);
+  const todayPlan = await new SupabaseTodayRepository(createAdminSupabaseClient()).getPlan(userId, recommendations.learningDate);
+  const vocabulary = await loadProductionVocabulary();
+  const vocabularyById = new Map(vocabulary.map((entry) => [entry.id, entry]));
+  const todayById = new Map((todayPlan?.dailyTargets ?? []).map((target) => [target.wordId, target]));
+  const recentIds = (article.matchedRecent7DayWordIds ?? article.matchedRecentWordIds).filter((id) => !todayById.has(id));
+  const recentMorphology = await new SupabaseDailyReadingMorphologyRepository(createAdminSupabaseClient()).getPublishedForWordIds(recentIds, vocabulary);
+  const recentLevel = article.matchedRecent7DayWordIds === undefined ? "recent-legacy" as const : "recent-7-day" as const;
+  const words: DailyReadingArticleWord[] = [];
+  const ids = new Set([...article.matchedTodayWordIds, ...(article.matchedRecent7DayWordIds ?? article.matchedRecentWordIds)]);
+  for (const wordId of ids) {
+    const target = todayById.get(wordId);
+    const entry = vocabularyById.get(wordId);
+    if (!target && !entry) continue;
+    const isToday = article.matchedTodayWordIds.includes(wordId);
+    const morphologySnapshot = target?.morphology ? target : recentMorphology.get(wordId);
+    words.push({
+      wordId, word: target?.word ?? entry?.word ?? entry?.lemma ?? wordId,
+      lemma: target?.lemma ?? entry?.lemma ?? wordId, surfaceForms: entry?.surfaceForms ?? [target?.word ?? target?.lemma ?? wordId],
+      coreMeaningZh: target?.coreMeaningZh ?? entry?.coreMeaningZh ?? "", coreDefinitionEn: target?.coreDefinitionEn ?? entry?.coreDefinitionEn ?? "",
+      ...(target?.phonetic ?? entry?.phonetic ? { phonetic: target?.phonetic ?? entry?.phonetic } : {}),
+      example: target?.example ?? entry?.example ?? "", morphology: morphologySnapshot?.morphology ?? null,
+      rootForm: morphologySnapshot?.rootForm, rootMeaningEn: morphologySnapshot?.rootMeaningEn,
+      rootMeaningZh: morphologySnapshot?.rootMeaningZh, rootExplanation: morphologySnapshot?.rootExplanation,
+      level: isToday ? "today" : recentLevel
+    });
+  }
+  const summaryMatches = words.map(({ wordId, lemma, surfaceForms, level }) => ({ wordId, lemma, surfaceForms, level }));
+  const summaryTokens = buildSummaryTokens(article.summary ?? "", summaryMatches, vocabulary);
+  let reinforcement: ReinforcementAvailability | null = null;
+  try { reinforcement = await createProductionReadingReinforcementService().getAvailability(userId, articleId); }
+  catch { /* Optional practice must not block the reader. */ }
+  return { article, words, summaryTokens, initialState, reinforcement };
+}

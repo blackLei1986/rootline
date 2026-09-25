@@ -21,9 +21,11 @@ export interface MorphologyCandidate {
   confidence: Extract<MorphologyAuditConfidence, "derived">;
   morphologyScore: number;
   source: "gold-dataset-exact-lemma";
+  datasetVersion: "gold-v1";
   provenance: {
     curatedLemma: string;
     matchingRule: "exact-lemma";
+    datasetVersion: "gold-v1";
   };
 }
 
@@ -122,9 +124,11 @@ export function buildMorphologyCoverageReport({
       confidence: "derived",
       morphologyScore: 100,
       source: "gold-dataset-exact-lemma",
+      datasetVersion: "gold-v1",
       provenance: {
         curatedLemma: curatedWord.lemma,
-        matchingRule: "exact-lemma"
+        matchingRule: "exact-lemma",
+        datasetVersion: "gold-v1"
       }
     });
   }

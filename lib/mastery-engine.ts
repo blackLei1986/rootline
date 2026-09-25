@@ -23,7 +23,7 @@ export interface MasterySummary {
 const DAY = 86_400_000;
 
 function activeRecallSucceeded(events: LearningEvent[], wordId: string): boolean {
-  return events.some((event) => event.wordId === wordId && event.type === "quiz_correct" && (event.metadata?.activeRecall === true || event.metadata?.mode === "meaning-recall" || event.metadata?.mode === "cloze"));
+  return events.some((event) => event.wordId === wordId && event.type === "quiz_correct" && (event.metadata?.activeRecall === true || event.metadata?.mode === "meaning-recall" || event.metadata?.mode === "cloze" || event.metadata?.mode === "reading-cloze" || event.metadata?.mode === "reading-recall"));
 }
 
 function isStable(progress: WordProgress, now: Date): boolean {

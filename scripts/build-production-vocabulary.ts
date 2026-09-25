@@ -1,10 +1,14 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { words } from "@/data/words";
-import { passesAcceptedMinimum } from "@/lib/vocabulary-production-report";
+import { PRODUCTION_VOCABULARY_VERSION } from "@/config/vocabulary-version";
+import { computeProductionTierTargets } from "@/lib/vocabulary-production-plan";
+import { excludeProductionLemmas, parseExcludedProductionLemmas } from "@/lib/vocabulary-production-review";
+import { isWithinAcceptedLemmaTarget, passesAcceptedMinimum } from "@/lib/vocabulary-production-report";
 import type { ContentTier, CoverageTag, FrequencyBand, ProductionVocabularyEntry } from "@/types";
 
 const target = Number(process.argv.find((arg) => arg.startsWith("--target="))?.split("=")[1] ?? 9_000);
+const excludedProductionLemmas = parseExcludedProductionLemmas(process.argv);
 const ecdictPath = resolve(process.argv.find((arg) => arg.startsWith("--ecdict="))?.split("=")[1] ?? "/tmp/rootline-ecdict-source/ECDICT-master/ecdict.csv");
 const oewnDirectory = resolve(process.argv.find((arg) => arg.startsWith("--oewn="))?.split("=")[1] ?? "/tmp/rootline-oewn-source");
 const outputPath = resolve(process.cwd(), "data/vocabulary/production-catalog.json");
@@ -65,12 +69,7 @@ function frequencyRank(row: EcdictRow): number {
   return ranks.length ? Math.min(...ranks) : Number.MAX_SAFE_INTEGER;
 }
 
-const tierTargets: Record<ContentTier, number> = {
-  "tier-1-core": 2_200,
-  "tier-2-important": 2_800,
-  "tier-3-recognition": 3_000,
-  "tier-4-extension": 1_000
-};
+const tierTargets = computeProductionTierTargets(target);
 
 function productionTierForExisting(entry: ProductionVocabularyEntry): ContentTier {
   if (entry.contentTier === "tier-1-core" && entry.examples.length >= 3) return "tier-1-core";
@@ -174,7 +173,7 @@ async function main() {
     const lemma = lemmaFromExchange(word, row.exchange); if (existingAccepted.has(lemma)) continue;
     const current = byLemma.get(lemma); if (!current || frequencyRank(row) < frequencyRank(current)) byLemma.set(lemma, row);
   }
-  const candidates = [...byLemma.entries()].map(([lemma, row]) => ({ lemma, row, oewn: resolveOewn(lemma, preferredPos(row.pos), entries, synsets), rank: frequencyRank(row) }))
+  const candidates = excludeProductionLemmas([...byLemma.entries()].map(([lemma, row]) => ({ lemma, row, oewn: resolveOewn(lemma, preferredPos(row.pos), entries, synsets), rank: frequencyRank(row) })), excludedProductionLemmas)
     .filter((item): item is typeof item & { oewn: NonNullable<typeof item.oewn> } => Boolean(item.oewn) && Number.isFinite(item.rank) && item.rank <= 30_000)
     .sort((a, b) => a.rank - b.rank || a.lemma.localeCompare(b.lemma));
   const generatedAt = new Date().toISOString();
@@ -232,7 +231,7 @@ async function main() {
   const sourceCount = fullCatalog.filter((entry) => entry.sourceMetadata.frequencySources.length > 0).length;
   const tierCount = fullCatalog.filter((entry) => entry.contentTier).length;
   const manifest = {
-    version: "2026.09.production-v1", generatedAt, target, acceptedLemmaCount: allAccepted, importedAcceptedLemmaCount: catalog.length,
+    version: PRODUCTION_VOCABULARY_VERSION, generatedAt, target, acceptedLemmaCount: allAccepted, importedAcceptedLemmaCount: catalog.length,
     existingAcceptedLemmaCount: existingAccepted.size, surfaceFormCount: new Set(fullCatalog.flatMap((entry) => entry.surfaceForms)).size, wordFamilyCount: new Set(fullCatalog.map((entry) => entry.wordFamilyId)).size,
     tierCounts: Object.fromEntries((["tier-1-core", "tier-2-important", "tier-3-recognition", "tier-4-extension"] as ContentTier[]).map((tier) => [tier, fullCatalog.filter((entry) => entry.contentTier === tier).length])),
     sources: [{ name: "ECDICT", license: "MIT", url: "https://github.com/skywind3000/ECDICT" }, { name: "Open English WordNet 2025", license: "CC-BY 4.0", url: "https://en-word.net/" }],
@@ -246,7 +245,7 @@ async function main() {
       brokenReferences: 0,
       tierDepthIssues: fullCatalog.filter((entry) => entry.contentTier === "tier-1-core" ? entry.examples.length < 3 : entry.contentTier === "tier-2-important" ? entry.examples.length < 2 : entry.examples.length < 1).length
     },
-    finalGatePassed: allAccepted >= 8_000, targetGatePassed: allAccepted >= 8_500 && allAccepted <= 9_500
+    finalGatePassed: allAccepted >= 8_000, targetGatePassed: isWithinAcceptedLemmaTarget(allAccepted)
   };
   const qaSamples = Array.from({ length: Math.ceil(catalog.length / 500) }, (_, batch) => ({ batch: batch + 1, start: batch * 500 + 1, end: Math.min(catalog.length, (batch + 1) * 500), samples: catalog.slice(batch * 500, (batch + 1) * 500).filter((_, index) => index % 20 === 0).slice(0, 25) }));
   await mkdir(dirname(outputPath), { recursive: true });

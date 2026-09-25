@@ -24,6 +24,7 @@ export const DEFAULT_LEARNING_GOAL: LearningGoal = Object.freeze({
 
 export const EMPTY_STORAGE: LearningStorage = Object.freeze({
   version: STORAGE_VERSION,
+  appliedTodayOperations: {},
   words: {},
   roots: {},
   dailyStats: {},
@@ -42,6 +43,7 @@ let cachedProgress: LearningStorage | null = null;
 export function createWordProgress(wordId: string): WordProgress {
   return {
     wordId,
+    readingRevision: 0,
     status: "new",
     recognitionState: null,
     recognitionConfidence: 0,
@@ -143,6 +145,7 @@ export function migrateStorage(value: unknown): LearningStorage {
   );
   return {
     version: STORAGE_VERSION,
+    appliedTodayOperations: candidate.appliedTodayOperations ?? {},
     words: normalizedWords,
     roots: normalizedRoots,
     dailyStats: normalizedDailyStats,
@@ -197,6 +200,13 @@ export function getWordProgress(wordId: string): WordProgress {
   return loadProgress().words[wordId] ?? createWordProgress(wordId);
 }
 
+/** Accept a verified server answer/state without queueing another whole-word upload. */
+export function hydrateAuthoritativeWordState(wordId: string, state: WordProgress): LearningStorage {
+  if (state.wordId !== wordId) throw new Error("Authoritative word ID mismatch.");
+  const current = loadProgress();
+  return saveProgress({...current, words: {...current.words, [wordId]: state}});
+}
+
 export function updateWordProgress(
   wordId: string,
   updater: (current: WordProgress) => WordProgress
@@ -208,8 +218,13 @@ export function updateWordProgress(
     ...storage,
     words: { ...storage.words, [wordId]: nextWord }
   });
-  queueSyncPayload("word-state", wordId, nextWord);
+  queueWordStateSync(wordId);
   return next;
+}
+
+export function queueWordStateSync(wordId: string): void {
+  const word = loadProgress().words[wordId];
+  if (word) queueSyncPayload("word-state", wordId, word);
 }
 
 export function getRootProgress(rootId: string): RootProgress {

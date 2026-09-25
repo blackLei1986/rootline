@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildFinalProductAcceptance, runTodayPlanInvariantChecks } from "@/scripts/final-product-acceptance";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { buildFinalProductAcceptance, passesFinalVocabularyGate, runTodayPlanInvariantChecks } from "@/scripts/final-product-acceptance";
 
 const REQUIRED_NAMES = [
   "acceptedLemmaCount",
@@ -20,6 +22,12 @@ const REQUIRED_NAMES = [
 ];
 
 describe("final product acceptance", () => {
+  it("requires the configured vocabulary target gate, not just the final minimum", () => {
+    const report = { finalGatePassed: true, targetGatePassed: false, duplicateCandidates: [], tierDepthIssues: [] };
+    expect(passesFinalVocabularyGate(report)).toBe(false);
+    expect(passesFinalVocabularyGate({ ...report, targetGatePassed: true })).toBe(true);
+  });
+
   it("produces every named acceptance result", async () => {
     const result = await buildFinalProductAcceptance(process.cwd());
     const names = result.results.map((check) => check.name);
@@ -30,7 +38,8 @@ describe("final product acceptance", () => {
 
   it("recalculates accepted lemma count from deployed shards and passes every prerequisite audit", async () => {
     const result = await buildFinalProductAcceptance(process.cwd());
-    expect(result.acceptedLemmaCount).toBe(9_000);
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "data/vocabulary/production-manifest.json"), "utf8")) as { acceptedLemmaCount: number };
+    expect(result.acceptedLemmaCount).toBe(manifest.acceptedLemmaCount);
     expect(result.results.find((check) => check.name === "fullTestBuildStatus")?.passed).toBe(false);
     for (const check of result.results) {
       if (check.name === "fullTestBuildStatus") continue;

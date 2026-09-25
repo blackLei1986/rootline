@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireVerifiedViewer } from "@/lib/auth/session";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { migrationChunkSchema, validateMigrationEntity } from "@/lib/sync/migration-schemas";
 import { processMigrationChunk } from "@/lib/sync/migration-service";
 import {
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
       viewer.userId,
       parsed.data,
       new SupabaseMigrationBatchStore(client),
-      new SupabaseMigrationEntityWriter(client)
+      new SupabaseMigrationEntityWriter(client, createAdminSupabaseClient())
     );
     return NextResponse.json(summary, {
       headers: { "cache-control": "private, no-store" }

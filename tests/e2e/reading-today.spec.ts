@@ -1,6 +1,14 @@
 import { expect, test } from "@playwright/test";
+import { getE2ETodayPlan, getE2ETodaySession, recordE2ETodayEvent } from "../../lib/today/e2e-fixture";
 
 test("Today follows 15 → 30 → 7 → 1 → 5 and resumes at Reading", async ({ page }) => {
+  await page.route(/\/api\/today$/, (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(getE2ETodayPlan()) }));
+  await page.route(/\/api\/today\/events/, async (route) => {
+    const session = route.request().method() === "GET"
+      ? getE2ETodaySession()
+      : recordE2ETodayEvent(route.request().postDataJSON());
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(session) });
+  });
   await page.goto("/today");
   await expect(page.getByText("约 22 分钟")).toBeVisible();
   await page.getByRole("button", { name: /开始今日学习/ }).click();

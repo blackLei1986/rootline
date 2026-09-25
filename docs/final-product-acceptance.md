@@ -1,15 +1,15 @@
 # Final product acceptance
 
-Generated at 2026-09-18T01:53:10.430Z
+Generated at 2026-09-25T06:13:50.082Z
 
-accepted lemma count: **9000**
+accepted lemma count: **9750**
 
 | Check | Status | Detail |
 | --- | --- | --- |
-| acceptedLemmaCount | pass | accepted lemma count 9000 (target 9000). |
-| vocabularyGate | pass | final gate true, duplicates 0, tier-depth issues 0. |
-| accountFlow | pass | 27 account checks passed. |
-| rls | pass | RLS policy tests reference owner-allow, cross-user-deny, and anonymous-deny assertions. |
+| acceptedLemmaCount | pass | accepted lemma count 9750 (target 9750). |
+| vocabularyGate | pass | final gate true, target gate true, duplicates 0, tier-depth issues 0. |
+| accountFlow | pass | 28 account checks passed. |
+| rls | pass | RLS policy tests cover owner read, cross-user denial, and anonymous denial; owner writes use a guarded server path. |
 | rssSafety | pass | SSRF policy and redirect-pivot tests present. |
 | articleDeduplication | pass | Article deduplication tests present. |
 | candidateLimit | pass | Reading hub limits candidates to three. |
@@ -19,7 +19,7 @@ accepted lemma count: **9000**
 | eligiblePlanStages | pass | Eligible plan includes reading and context-quiz stages with five questions. |
 | degradation | pass | Article-less plan omits reading stages and keeps vocabulary stages. |
 | stageOrder | pass | Today stage order frozen as warmup → scan → learn → reading → context-quiz → summary. |
-| rssAudit | pass | 21 RSS checks passed; reading index lemma count 9000. |
+| rssAudit | pass | 22 RSS checks passed; reading index lemma count 9750. |
 | fullTestBuildStatus | gate | Verified by the release gate command chain (pnpm test / lint / tsc / build), not by this aggregator. |
 
 Overall: **PASS**
