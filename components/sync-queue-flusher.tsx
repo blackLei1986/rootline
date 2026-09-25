@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { hydrateAuthoritativeWordState } from "@/lib/storage";
 import {
-  discardConflictingWordStateOperation, flushSyncQueue, listPendingWordOperations, SYNC_QUEUE_EVENT
+  discardConflictingWordStateOperation, flushSyncQueue, listPendingWordOperations, readSyncQueue, SYNC_QUEUE_EVENT
 } from "@/lib/sync/offline-queue";
 import type { WordProgress } from "@/types/progress";
 
@@ -12,6 +12,7 @@ export function SyncQueueFlusher() {
   const [exported, setExported] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -19,10 +20,16 @@ export function SyncQueueFlusher() {
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     async function flush() {
-      if (!active || flushing || !navigator.onLine) return;
+      if (!active || flushing) return;
+      setPendingCount(readSyncQueue().length);
+      if (!navigator.onLine) return;
       flushing = true;
-      const result = await flushSyncQueue();
+      let result;
+      try { result = await flushSyncQueue(); }
+      catch { setError("同步暂时不可用；本地修改仍保留。"); flushing = false; return; }
       flushing = false;
+      if (!active) return;
+      setPendingCount(result.remaining);
       if (result.conflict) {
         setConflict(result.conflict);
         setExported(false);
@@ -33,7 +40,7 @@ export function SyncQueueFlusher() {
       retryTimer = setTimeout(() => void flush(), delay);
     }
 
-    const requestFlush = () => void flush();
+    const requestFlush = () => { setPendingCount(readSyncQueue().length); void flush(); };
     window.addEventListener("online", requestFlush);
     window.addEventListener(SYNC_QUEUE_EVENT, requestFlush);
     void flush();
@@ -73,7 +80,11 @@ export function SyncQueueFlusher() {
     }
   }
 
-  if (!conflict) return null;
+  if (!conflict) return pendingCount > 0 ? <aside role="status" className="fixed bottom-16 right-4 z-50 max-w-sm rounded-xl border border-amber-300 bg-white p-4 shadow-lg md:bottom-4">
+    <p>{pendingCount} 项等待同步，本地修改仍保留，尚未保存到云端。</p>
+    {error && <p>{error}</p>}
+    <button type="button" className="mt-2 font-semibold text-[var(--primary)]" onClick={() => window.dispatchEvent(new Event(SYNC_QUEUE_EVENT))}>重试同步</button>
+  </aside> : null;
   const pending = listPendingWordOperations(conflict.entityId);
   const exportUrl = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(pending, null, 2))}`;
   return <aside role="alert" className="fixed bottom-4 right-4 z-50 max-w-sm rounded-xl border border-amber-300 bg-white p-4 shadow-lg">

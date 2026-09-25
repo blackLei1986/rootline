@@ -7,6 +7,7 @@ import { SupabaseTodayRepository } from "@/lib/repositories/supabase/today-repos
 import { SupabaseFeedRepository } from "@/lib/repositories/supabase/feed-repository";
 import { recordArticleBundleEncounters } from "@/lib/reading/server-encounters";
 import { getE2ETodaySession, recordE2ETodayEvent } from "@/lib/today/e2e-fixture";
+import { RepositoryError } from "@/lib/repositories/contracts";
 
 const eventSchema = z.object({
   operationId: z.string().min(1).max(300),
@@ -47,7 +48,16 @@ export async function POST(request: Request) {
   const viewer = await requireVerifiedViewerHttp();
   if (viewer instanceof NextResponse) return viewer;
   const event = eventSchema.parse(await request.json());
-  const session = await createProductionTodayEventService().recordTodayEvent(viewer.userId, event);
+  let session;
+  try {
+    session = await createProductionTodayEventService().recordTodayEvent(viewer.userId, event);
+  } catch (error) {
+    if (error instanceof RepositoryError && typeof error.cause === "object" && error.cause !== null
+      && "code" in error.cause && error.cause.code === "40001") {
+      return NextResponse.json({message: "今日进度已变化，请重新读取。"}, {status: 409});
+    }
+    throw error;
+  }
   if (event.type === "article_completed") {
     const client = createAdminSupabaseClient();
     const plan = await new SupabaseTodayRepository(client).getOwnedPlan(viewer.userId, event.planId);

@@ -51,6 +51,16 @@ describe("offline sync queue", () => {
     expect(readSyncQueue(memoryStorageAdapter)).toHaveLength(1);
   });
 
+  it("retains an offline operation until a later transport succeeds", async () => {
+    enqueueSyncOperation(operation("offline-1"), memoryStorageAdapter);
+    const failed = await flushSyncQueue({adapter: memoryStorageAdapter, transport: async () => {throw new Error("offline");}});
+    expect(failed.remaining).toBe(1);
+    expect(readSyncQueue(memoryStorageAdapter).map((item) => item.id)).toEqual(["offline-1"]);
+    const succeeded = await flushSyncQueue({adapter: memoryStorageAdapter, transport: async () => {}});
+    expect(succeeded.remaining).toBe(0);
+    expect(readSyncQueue(memoryStorageAdapter)).toEqual([]);
+  });
+
   it("preserves the exact stale word operation and stops automatic retry on a revision conflict", async () => {
     const stale = operation("old-snapshot");
     stale.entityId = "adapt";

@@ -6,12 +6,14 @@ const mocks = vi.hoisted(() => ({
   flushSyncQueue: vi.fn(),
   listPendingWordOperations: vi.fn(),
   discardConflictingWordStateOperation: vi.fn(),
-  hydrateAuthoritativeWordState: vi.fn()
+  hydrateAuthoritativeWordState: vi.fn(),
+  readSyncQueue: vi.fn()
 }));
 vi.mock("@/lib/sync/offline-queue", () => ({
   SYNC_QUEUE_EVENT: "rootline-sync-queue-updated",
   flushSyncQueue: mocks.flushSyncQueue,
   listPendingWordOperations: mocks.listPendingWordOperations,
+  readSyncQueue: mocks.readSyncQueue,
   discardConflictingWordStateOperation: mocks.discardConflictingWordStateOperation
 }));
 vi.mock("@/lib/storage", () => ({ hydrateAuthoritativeWordState: mocks.hydrateAuthoritativeWordState }));
@@ -23,6 +25,7 @@ describe("sync revision conflict recovery", () => {
       conflict: {operationId: "stale", entityId: "adapt"}});
     mocks.discardConflictingWordStateOperation.mockReturnValue(true);
     mocks.listPendingWordOperations.mockReturnValue([{id: "stale", kind: "word-state", entityId: "adapt"}]);
+    mocks.readSyncQueue.mockReturnValue([]);
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -47,5 +50,16 @@ describe("sync revision conflict recovery", () => {
     fireEvent.click(await screen.findByRole("button", {name: "使用云端版本"}));
     await waitFor(() => expect(mocks.discardConflictingWordStateOperation).toHaveBeenCalledWith("stale", "adapt"));
     expect(mocks.hydrateAuthoritativeWordState).toHaveBeenCalledWith("adapt", {wordId: "adapt", readingRevision: 1});
+  });
+
+  it("shows retained offline work across remount without claiming a cloud save", async () => {
+    mocks.readSyncQueue.mockReturnValue([{id: "pending", kind: "word-state"}]);
+    mocks.flushSyncQueue.mockResolvedValue({applied: 0, remaining: 1, retryAt: new Date(Date.now() + 30_000).toISOString()});
+    const first = render(<SyncQueueFlusher />);
+    expect(await screen.findByRole("status")).toHaveTextContent("1 项等待同步");
+    expect(screen.queryByText("已保存到云端")).not.toBeInTheDocument();
+    first.unmount();
+    render(<SyncQueueFlusher />);
+    expect(await screen.findByRole("status")).toHaveTextContent("1 项等待同步");
   });
 });
