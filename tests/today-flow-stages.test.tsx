@@ -15,6 +15,14 @@ describe("Today Reading flow", () => {
     expect(screen.queryByText(/9000 词/)).not.toBeInTheDocument();
   });
 
+  it("hides backend errors and offers a Today retry", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {throw new Error("RPC private database detail");}));
+    render(<TodayLearningFlow />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("今日计划暂时无法加载");
+    expect(screen.getByRole("link", {name: "重试"})).toHaveAttribute("href", "/today");
+    expect(screen.queryByText(/RPC private database detail/)).not.toBeInTheDocument();
+  });
+
   it("shows 今日阅读 below the Daily-30 card only in setup/complete, not during active learning", async () => {
     vi.stubGlobal("fetch", vi.fn(async (_input: string, init?: RequestInit) => ({
       ok: true,

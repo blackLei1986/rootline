@@ -4,13 +4,17 @@ import {connection} from "next/server";
 import {getOptionalViewer} from "@/lib/auth/session";
 import {getRootById} from "@/data/roots";
 import {loadTrustedRootDirectory} from "@/lib/roots/server";
+import {ProductState} from "@/components/product-state";
 
 export const metadata: Metadata = {title: "可信词根目录"};
 
 export default async function RootsPage() {
   await connection();
   const viewer = await getOptionalViewer();
-  const {rows, personal} = await loadTrustedRootDirectory(viewer?.emailVerified ? viewer.userId : null);
+  let directory;
+  try { directory = await loadTrustedRootDirectory(viewer?.emailVerified ? viewer.userId : null); }
+  catch { return <main className="page-shell py-10"><ProductState title="词根目录暂时无法加载" description="请稍后重试；已核验的资料不会因此丢失。" actionHref="/roots" actionLabel="重试" variant="error" /></main>; }
+  const {rows, personal} = directory;
   return <main className="page-shell max-w-5xl py-10 sm:py-14">
     <p className="text-xs font-bold uppercase text-[var(--primary)]">Roots</p>
     <h1 className="mt-2 text-3xl font-bold sm:text-4xl">可信词根目录</h1>

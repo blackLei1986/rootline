@@ -5,7 +5,9 @@ import type { DailyReadingRecommendationResult } from "@/types/reading-recommend
 const mocks = vi.hoisted(() => ({
   getOptionalViewer: vi.fn(),
   getForToday: vi.fn(),
-  listActive: vi.fn()
+  listActive: vi.fn(),
+  shouldEmphasizeToday: vi.fn(),
+  connection: vi.fn()
 }));
 
 vi.mock("@/lib/auth/session", () => ({ getOptionalViewer: mocks.getOptionalViewer }));
@@ -13,6 +15,8 @@ vi.mock("@/lib/reading/server-recommendations", () => ({
   createProductionDailyReadingRecommendationsService: () => ({ getForToday: mocks.getForToday })
 }));
 vi.mock("@/lib/reading/reinforcement/server", () => ({listActiveReadingReinforcementSessions: mocks.listActive}));
+vi.mock("@/lib/reading/today-priority", () => ({shouldEmphasizeToday: mocks.shouldEmphasizeToday}));
+vi.mock("next/server", () => ({connection: mocks.connection}));
 
 import ReadingPage from "@/app/reading/page";
 
@@ -25,6 +29,8 @@ describe("Daily-3 Reading home", () => {
     mocks.getOptionalViewer.mockReset();
     mocks.getForToday.mockReset();
     mocks.listActive.mockReset().mockResolvedValue([]);
+    mocks.shouldEmphasizeToday.mockReset().mockResolvedValue(true);
+    mocks.connection.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => cleanup());
@@ -35,12 +41,22 @@ describe("Daily-3 Reading home", () => {
 
     render(await ReadingPage());
 
+    expect(mocks.connection).toHaveBeenCalledOnce();
     expect(mocks.getForToday).toHaveBeenCalledWith("reader-1");
     expect(screen.getByRole("heading", { name: "今日阅读" })).toBeVisible();
     expect(screen.getByText("今天还没有可推荐的短文。" )).toBeVisible();
+    expect(screen.getByRole("link", {name: /先完成今日学习/})).toHaveAttribute("href", "/today");
     expect(screen.queryByRole("link", { name: "导入" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "订阅源" })).not.toBeInTheDocument();
     expect(screen.queryByText(/添加少量高质量来源/)).not.toBeInTheDocument();
+  });
+
+  it("does not compete with an already completed Today", async () => {
+    mocks.getOptionalViewer.mockResolvedValue({userId: "reader-1", emailVerified: true});
+    mocks.getForToday.mockResolvedValue(emptyResult);
+    mocks.shouldEmphasizeToday.mockResolvedValue(false);
+    render(await ReadingPage());
+    expect(screen.queryByRole("link", {name: /先完成今日学习/})).not.toBeInTheDocument();
   });
 
   it("routes signed-out or unverified viewers through verified access and does not load recommendations", async () => {
