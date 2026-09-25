@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(20);
+select plan(26);
 
 select has_table('public', 'progress_vocabulary_snapshots', 'observed growth has a private daily snapshot table');
 select ok((select relrowsecurity from pg_class
@@ -21,6 +21,12 @@ select ok(not has_function_privilege('authenticated', 'public.progress_passive_w
   'authenticated users cannot call lifetime evidence helper');
 select ok(has_function_privilege('service_role', 'public.progress_passive_word_ids(uuid)', 'execute'),
   'server role can call lifetime evidence helper');
+select ok(not has_function_privilege('authenticated',
+  'public.progress_record_stable_snapshot(uuid,date,integer,text,timestamptz)', 'execute'),
+  'authenticated users cannot write through the snapshot helper');
+select ok(has_function_privilege('service_role',
+  'public.progress_record_stable_snapshot(uuid,date,integer,text,timestamptz)', 'execute'),
+  'server role can atomically record observed stable count');
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password,
@@ -59,13 +65,32 @@ select results_eq($$ select word_id from public.progress_passive_word_ids(
 select results_eq($$ select word_id from public.progress_passive_word_ids(
   '00000000-0000-0000-0000-0000000000a2') $$, array['secret'::text],
   'second account receives only its own passive ID');
+insert into public.vocabulary_encounters
+  (user_id,word_id,document_kind,document_id,first_encountered_at,last_encountered_at)
+values
+  ('00000000-0000-0000-0000-0000000000a1','article-only','article','article-a',now(),now()),
+  ('00000000-0000-0000-0000-0000000000a1','adapt','article','article-a',now(),now()),
+  ('00000000-0000-0000-0000-0000000000a2','other-article','article','article-b',now(),now());
+select results_eq($$ select word_id from public.progress_passive_word_ids(
+  '00000000-0000-0000-0000-0000000000a1') order by word_id $$,
+  array['adapt'::text,'article-only'::text],
+  'completed article encounter is counted once alongside event evidence');
+select is(public.progress_record_stable_snapshot(
+  '00000000-0000-0000-0000-0000000000a1','2026-09-26',7,'test-catalog','2026-09-26T12:00:00Z'),
+  true, 'newer stable observation is stored');
+select is(public.progress_record_stable_snapshot(
+  '00000000-0000-0000-0000-0000000000a1','2026-09-26',3,'test-catalog','2026-09-26T11:00:00Z'),
+  false, 'stale concurrent observation is ignored');
+select results_eq($$ select stable_count from public.progress_vocabulary_snapshots
+  where user_id='00000000-0000-0000-0000-0000000000a1' and learning_date='2026-09-26' $$,
+  array[7], 'stale request cannot overwrite the newer stable count');
 reset role;
 
 set local role authenticated;
 select set_config('request.jwt.claims',
   '{"sub":"00000000-0000-0000-0000-0000000000a1","role":"authenticated"}', true);
-select results_eq($$ select stable_count from public.progress_vocabulary_snapshots $$,
-  array[5], 'owner reads only the owner snapshot');
+select results_eq($$ select stable_count from public.progress_vocabulary_snapshots order by learning_date $$,
+  array[5,7], 'owner reads only the owner snapshots');
 select throws_ok($$ insert into public.progress_vocabulary_snapshots
   (user_id, learning_date, stable_count, catalog_version)
   values ('00000000-0000-0000-0000-0000000000a1', '2026-09-26', 1, 'forged') $$,

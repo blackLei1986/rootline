@@ -9,9 +9,11 @@ type Query = {table: string; filters: Array<[string, string, unknown]>; orders: 
   range: [number, number] | null; limit: number | null; selected: string};
 type Reply = {data: unknown; error: null | {code?: string; message: string}; count?: number | null};
 
-function fakeClient(resolve: (query: Query) => Reply, rpcResult: Reply = {data: [], error: null}) {
+function fakeClient(resolve: (query: Query) => Reply,
+  rpcResult: Reply | ((name: string, range: [number, number] | null) => Reply) = {data: [], error: null}) {
   const calls: Query[] = [];
-  const rpcCalls: Array<{name: string; args: unknown}> = [];
+  const rpcCalls: Array<{name: string; args: unknown; range: [number, number] | null;
+    order: string | null}> = [];
   const client = {
     from(table: string) {
       const query: Query = {table, filters: [], orders: [], range: null, limit: null, selected: ""};
@@ -37,7 +39,19 @@ function fakeClient(resolve: (query: Query) => Reply, rpcResult: Reply = {data: 
       };
       return builder;
     },
-    rpc(name: string, args: unknown) {rpcCalls.push({name, args}); return Promise.resolve(rpcResult);}
+    rpc(name: string, args: unknown) {
+      const call = {name, args, range: null as [number, number] | null, order: null as string | null};
+      rpcCalls.push(call);
+      const builder = {
+        order(column: string) {call.order = column; return builder;},
+        range(from: number, to: number) {call.range = [from, to]; return builder;},
+        then(onFulfilled: (value: Reply) => unknown, onRejected?: (reason: unknown) => unknown) {
+          const reply = typeof rpcResult === "function" ? rpcResult(name, call.range) : rpcResult;
+          return Promise.resolve(reply).then(onFulfilled, onRejected);
+        }
+      };
+      return builder;
+    }
   };
   return {client: client as unknown as DatabaseClient, calls, rpcCalls};
 }
@@ -139,12 +153,25 @@ describe("Supabase Progress repository", () => {
       {data: [{word_id: "adapt"}, {word_id: "inspect"}], error: null});
     const repository = new SupabaseProgressRepository(fake.client);
     expect(await repository.getPassiveWordIds(owner)).toEqual(new Set(["adapt", "inspect"]));
-    await repository.upsertSnapshot(owner, "2026-09-25", 4, "2026.09.production-v2");
-    expect(fake.rpcCalls).toEqual([{name: "progress_passive_word_ids", args: {p_user_id: owner}}]);
-    const snapshot = fake.calls.find((call) => call.table === "progress_vocabulary_snapshots")!;
-    expect(snapshot.filters.find(([op, column]) => op === "upsert" && column === "row")?.[2])
-      .toMatchObject({user_id: owner, learning_date: "2026-09-25",
-        stable_count: 4, catalog_version: "2026.09.production-v2"});
-    expect(hasFilter(snapshot, "upsert", "options", {onConflict: "user_id,learning_date"})).toBe(true);
+    await repository.upsertSnapshot(owner, "2026-09-25", 4, "2026.09.production-v2",
+      "2026-09-25T12:00:00.000Z");
+    expect(fake.rpcCalls).toEqual([
+      {name: "progress_passive_word_ids", args: {p_user_id: owner}, range: [0, 999], order: "word_id"},
+      {name: "progress_record_stable_snapshot", args: {p_user_id: owner,
+        p_learning_date: "2026-09-25", p_stable_count: 4,
+        p_catalog_version: "2026.09.production-v2", p_observed_at: "2026-09-25T12:00:00.000Z"}, range: null, order: null}
+    ]);
+    expect(fake.calls.find((call) => call.table === "progress_vocabulary_snapshots")).toBeUndefined();
+  });
+
+  it("pages more than 1,000 passive word IDs with a stable sort and owner argument", async () => {
+    const firstPage = Array.from({length: 1_000}, (_, index) => ({word_id: `word-${String(index).padStart(4, "0")}`}));
+    const fake = fakeClient(() => ({data: [], error: null}), (_name, range) => ({data:
+      range?.[0] === 0 ? firstPage : [{word_id: "word-1000"}], error: null}));
+    const ids = await new SupabaseProgressRepository(fake.client).getPassiveWordIds(owner);
+    expect(ids.size).toBe(1_001);
+    expect(fake.rpcCalls.map((call) => call.range)).toEqual([[0, 999], [1000, 1999]]);
+    expect(fake.rpcCalls.every((call) => call.order === "word_id" &&
+      JSON.stringify(call.args) === JSON.stringify({p_user_id: owner}))).toBe(true);
   });
 });

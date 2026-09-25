@@ -10,6 +10,14 @@ const dayLabel: Record<ProgressDay["state"], string> = {
 export function ProgressDashboard({dashboard}: {dashboard: ProgressDashboardDTO}) {
   const roots = [...dashboard.roots].filter((root) => root.usable > 0)
     .sort((a, b) => b.stable - a.stable || b.learned - a.learned || a.rootKey.localeCompare(b.rootKey));
+  const topMastered = [...roots].filter((root) => root.stable > 0)
+    .sort((a, b) => (b.percent ?? 0) - (a.percent ?? 0) || b.stable - a.stable)[0];
+  const strengthening = [...roots].filter((root) => root.learned > root.stable && root.rootId !== topMastered?.rootId)
+    .sort((a, b) => (b.learned - b.stable) - (a.learned - a.stable) || b.learned - a.learned)[0];
+  const highlights = [...new Map([topMastered, strengthening, ...roots]
+    .filter((root): root is RootMasteryRow => Boolean(root))
+    .map((root) => [root.rootId, root])).values()].slice(0, 3);
+  const more = roots.filter((root) => !highlights.some((highlight) => highlight.rootId === root.rootId));
   return <div className="page-shell min-w-0 py-8 pb-24 sm:py-12 md:pb-12">
     <header className="mb-7"><p className="label-caps text-xs font-bold text-[var(--primary)]">Progress 2.0</p>
       <h1 className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">学习进度</h1>
@@ -38,17 +46,17 @@ export function ProgressDashboard({dashboard}: {dashboard: ProgressDashboardDTO}
       <WindowCard title="近 30 日" window={dashboard.last30} />
       <section aria-label="词根掌握" className="rounded-3xl border bg-white p-5 sm:p-6">
         <h2 className="text-lg font-bold">词根掌握</h2>
-        {roots.length ? <ul className="mt-3 space-y-3">{roots.slice(0, 3).map((root) => <RootRow key={root.rootId} root={root} />)}</ul>
+        {highlights.length ? <ul className="mt-3 space-y-3">{highlights.map((root) => <RootRow key={root.rootId} root={root} />)}</ul>
           : <p className="mt-3 text-sm text-[var(--muted-foreground)]">暂无可展示的已验证词根关联。</p>}
-        {roots.length > 3 && <details className="mt-4 border-t pt-4 text-sm"><summary className="cursor-pointer font-semibold text-[var(--primary)]">查看其他 {roots.length - 3} 个词根</summary>
-          <ul className="mt-3 space-y-3">{roots.slice(3).map((root) => <RootRow key={root.rootId} root={root} />)}</ul></details>}
+        {more.length > 0 && <details className="mt-4 border-t pt-4 text-sm"><summary className="cursor-pointer font-semibold text-[var(--primary)]">查看其他 {more.length} 个词根</summary>
+          <ul className="mt-3 space-y-3">{more.map((root) => <RootRow key={root.rootId} root={root} />)}</ul></details>}
         <p className="mt-4 text-xs leading-5 text-[var(--muted-foreground)]">只统计已审核且已验证的词根关联；一个词可关联多个词根，词根数不可相加当作词汇总数。</p>
       </section>
     </div>
     <section aria-label="词汇增长记录" className="mt-4 rounded-3xl border bg-white p-5 sm:p-6">
       <h2 className="text-lg font-bold">词汇增长记录</h2>
       {!dashboard.growth.available ? <p className="mt-3 text-sm text-[var(--muted-foreground)]">增长记录暂不可用；当前稳定掌握数仍可查看，请稍后重试。</p>
-        : !dashboard.growth.hasTrend ? <p className="mt-3 text-sm text-[var(--muted-foreground)]">不足两个观测日，暂不绘制趋势。{dashboard.growth.firstObservedDate ? `首个观测日：${dashboard.growth.firstObservedDate}。` : "尚无观测记录。"}</p>
+        : !dashboard.growth.hasTrend ? <p className="mt-3 text-sm text-[var(--muted-foreground)]">不足两个观测日，暂不绘制趋势。{dashboard.growth.firstObservedDate ? `近 30 日首个观测日：${dashboard.growth.firstObservedDate}。` : "尚无观测记录。"}</p>
           : <GrowthChart points={dashboard.growth.points} firstObservedDate={dashboard.growth.firstObservedDate} />}
     </section>
     {dashboard.reading && <section aria-label="阅读巩固" className="mt-4 rounded-3xl border bg-white p-5 sm:p-6">
@@ -79,8 +87,10 @@ function RootRow({root}: {root: RootMasteryRow}) {
 function GrowthChart({points, firstObservedDate}: {points: ProgressDashboardDTO["growth"]["points"]; firstObservedDate: string | null}) {
   const values = points.map((point) => point.stable);
   const min = Math.min(...values), max = Math.max(...values), spread = Math.max(1, max - min);
-  return <div className="mt-3 min-w-0"><p className="text-sm text-[var(--muted-foreground)]">首个观测日：{firstObservedDate}。只显示实际观测点；缺失日期没有补值，稳定数可能下降。</p>
+  const firstTime = Date.parse(`${points[0].date}T00:00:00Z`);
+  const elapsed = Math.max(1, Date.parse(`${points.at(-1)!.date}T00:00:00Z`) - firstTime);
+  return <div className="mt-3 min-w-0"><p className="text-sm text-[var(--muted-foreground)]">近 30 日首个观测日：{firstObservedDate}。只显示实际观测点；缺失日期没有补值，稳定数可能下降。</p>
     <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="mt-3 h-28 w-full" role="img" aria-label={`稳定词汇观测从 ${points[0].date} 的 ${points[0].stable} 个到 ${points.at(-1)!.date} 的 ${points.at(-1)!.stable} 个`}>
-      {points.map((point, index) => <circle key={point.date} cx={Math.round(4 + index / (points.length - 1) * 92)} cy={Math.round(84 - (point.stable - min) / spread * 68)} r="2" fill="var(--primary)" />)}</svg>
+      {points.map((point) => <circle key={point.date} cx={Math.round(4 + (Date.parse(`${point.date}T00:00:00Z`) - firstTime) / elapsed * 92)} cy={Math.round(84 - (point.stable - min) / spread * 68)} r="2" fill="var(--primary)" />)}</svg>
     <ol className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--muted-foreground)]">{points.map((point) => <li key={point.date}>{point.date}: {point.stable}</li>)}</ol></div>;
 }

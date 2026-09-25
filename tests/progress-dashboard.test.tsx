@@ -72,4 +72,26 @@ describe("Progress 2.0 dashboard", () => {
     expect(screen.getByText(/增长记录暂不可用/)).toBeVisible();
     expect(screen.getByText("4 / 10,000")).toBeVisible();
   });
+
+  it("highlights high-percentage mastered roots and actively strengthening roots", () => {
+    const {container} = render(<ProgressDashboard dashboard={{...dashboardFixture, roots: [
+      ...dashboardFixture.roots,
+      {rootId: "small", rootKey: "small", usable: 2, learned: 2, stable: 2, percent: 100, weakWordIds: []}
+    ]}} />);
+    const rootSection = screen.getByRole("region", {name: "词根掌握"});
+    const visibleHighlights = rootSection.querySelector(":scope > ul")!;
+    expect(visibleHighlights).toHaveTextContent("small");
+    expect(visibleHighlights).toHaveTextContent("form");
+    expect(container.querySelector("details")).toBeInTheDocument();
+  });
+
+  it("positions observed growth points by their real dates without filling gaps", () => {
+    const {container} = render(<ProgressDashboard dashboard={{...dashboardFixture,
+      growth: {available: true, hasTrend: true, firstObservedDate: "2026-09-01", points: [
+        {date: "2026-09-01", stable: 4}, {date: "2026-09-02", stable: 5}, {date: "2026-09-11", stable: 6}
+      ]}
+    }} />);
+    const xPositions = [...container.querySelectorAll("svg circle")].map((circle) => Number(circle.getAttribute("cx")));
+    expect(xPositions).toEqual([4, 13, 96]);
+  });
 });

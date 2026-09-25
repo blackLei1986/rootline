@@ -84,9 +84,13 @@ export class SupabaseProgressRepository implements ProgressRepository {
   }
 
   async getPassiveWordIds(userId: string): Promise<Set<string>> {
-    const {data, error} = await this.client.rpc("progress_passive_word_ids", {p_user_id: userId});
-    throwRepositoryError(error, "load Progress passive word IDs");
-    return new Set((data ?? []).map((row) => row.word_id));
+    const rows = await collectPagedRecords(async (from, to) => {
+      const {data, error} = await this.client.rpc("progress_passive_word_ids", {p_user_id: userId})
+        .order("word_id").range(from, to);
+      throwRepositoryError(error, "load Progress passive word IDs");
+      return data ?? [];
+    });
+    return new Set(rows.map((row) => row.word_id));
   }
 
   async getTrustedRootLinks(): Promise<TrustedRootLink[]> {
@@ -134,11 +138,12 @@ export class SupabaseProgressRepository implements ProgressRepository {
     return (data ?? []).map((row) => ({learningDate: row.learning_date, stableCount: row.stable_count}));
   }
 
-  async upsertSnapshot(userId: string, date: string, count: number, catalogVersion: string): Promise<void> {
-    const {error} = await this.client.from("progress_vocabulary_snapshots").upsert({
-      user_id: userId, learning_date: date, stable_count: count, catalog_version: catalogVersion,
-      captured_at: new Date().toISOString()
-    }, {onConflict: "user_id,learning_date"});
+  async upsertSnapshot(userId: string, date: string, count: number, catalogVersion: string,
+    observedAt: string): Promise<void> {
+    const {error} = await this.client.rpc("progress_record_stable_snapshot", {
+      p_user_id: userId, p_learning_date: date, p_stable_count: count,
+      p_catalog_version: catalogVersion, p_observed_at: observedAt
+    });
     throwRepositoryError(error, "save Progress growth snapshot");
   }
 

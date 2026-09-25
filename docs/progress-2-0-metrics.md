@@ -12,15 +12,15 @@ This dashboard is an account-scoped view for a verified learner. It is not a his
 
 ## Vocabulary and roots
 
-- Counts use distinct IDs in the production vocabulary catalog. A word occupies one state only: stable, else learning, else touched. Passive Reading and recognition-only evidence can mark touched but cannot by themselves mark stable.
+- Counts use distinct IDs in the production vocabulary catalog. A word occupies one state only: stable, else learning, else touched. Passive Reading and recognition-only evidence can mark touched but cannot by themselves mark stable. Passive IDs are paged in a deterministic order and include both learning/Reading events and saved article encounters.
 - Stable uses the shared `calculateWordMastery` predicate: a delayed review at least 24 hours after first learning, at least two correct or verification successes, memory strength at least 55, latest rating not `again`, and no review more than 14 days overdue. Learning is a non-stable word with active learning or review evidence; touched is passive or recognition evidence without active learning.
 - The 10K measure is current stable catalog words / **10,000**, rounded to one decimal and capped at 100%. The current catalog size is not the denominator. A very small nonzero stable count may display `0.0%`; the integer numerator remains visible.
 - Root links come only from the latest published Gold dataset's approved, verified morphology records and root segments. A catalog word counts once per root, but may contribute to multiple roots. Root mastery is stable linked words / usable linked catalog words; learned includes learning and stable. Root counts are not added to derive global vocabulary.
 
 ## Growth and Reading
 
-- Opening Progress as a verified learner observes and upserts the current stable count for that learner's local date. There is one snapshot per user/date; a later observation on the same date replaces the prior count.
-- The growth display uses only actual recorded dates in the recent window. It does not backfill pre-Phase-3 history or interpolate days without visits. Fewer than two points are described in text, not drawn as a trend. A stable count can decrease after an incorrect answer or substantial overdue time.
+- Opening Progress as a verified learner observes and upserts the current stable count for that learner's local date. There is one snapshot per user/date; a later observation on the same date replaces the prior count. The database rejects an older request that finishes after a newer observation.
+- The growth display uses only actual recorded dates in the recent 30-day window. It does not backfill pre-Phase-3 history or interpolate days without visits. Its first-date label refers to that window, not all-time history. Fewer than two points are described in text, not drawn as a trend. A stable count can decrease after an incorrect answer or substantial overdue time.
 - Reading's optional number counts completed vocabulary-reinforcement sessions for articles dated within the recent seven local learning dates. It is separate from Today completion and the streak. If this bounded source fails, the card is omitted rather than presented as zero.
 - Estimated vocabulary size is deferred. The current catalog and individual learning records do not support a calibrated estimate or confidence interval for unseen words.
 

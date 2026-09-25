@@ -330,6 +330,11 @@ export interface Database {
         Args: {p_user_id: string};
         Returns: {word_id: string}[];
       };
+      progress_record_stable_snapshot: {
+        Args: {p_user_id: string; p_learning_date: string; p_stable_count: number;
+          p_catalog_version: string; p_observed_at: string};
+        Returns: boolean;
+      };
       apply_guarded_word_state: {
         Args: {
           p_user_id: string;

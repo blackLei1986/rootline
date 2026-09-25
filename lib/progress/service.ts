@@ -17,7 +17,8 @@ export interface ProgressRepository {
   getPassiveWordIds(userId: string): Promise<Set<string>>;
   getTrustedRootLinks(): Promise<TrustedRootLink[]>;
   getSnapshots(userId: string, fromDate: string, toDate: string): Promise<Array<{learningDate: string; stableCount: number}>>;
-  upsertSnapshot(userId: string, date: string, count: number, catalogVersion: string): Promise<void>;
+  upsertSnapshot(userId: string, date: string, count: number, catalogVersion: string,
+    observedAt: string): Promise<void>;
   countCompletedReadingPractice(userId: string, fromDate: string, toDate: string): Promise<number>;
 }
 
@@ -47,7 +48,8 @@ export function createProgressService(deps: {repository: ProgressRepository;
 
     let growth: ProgressDashboardDTO["growth"];
     try {
-      await deps.repository.upsertSnapshot(userId, todayDate, classified.stable, catalog.version);
+      await deps.repository.upsertSnapshot(userId, todayDate, classified.stable, catalog.version,
+        now.toISOString());
       const snapshots = await deps.repository.getSnapshots(userId, from30, todayDate);
       growth = {available: true, ...buildObservedGrowth(snapshots, todayDate)};
     } catch {
