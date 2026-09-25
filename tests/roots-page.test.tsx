@@ -1,5 +1,5 @@
-import {render, screen} from "@testing-library/react";
-import {beforeEach, describe, expect, it, vi} from "vitest";
+import {cleanup, render, screen} from "@testing-library/react";
+import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 
 const fixture = vi.hoisted(() => ({rows: [] as Array<{rootKey: string; wordIds: string[]; usable: number; learned: number; stable: number}>, personal: false}));
 vi.mock("@/lib/roots/server", () => ({loadTrustedRootDirectory: async () => ({rows: fixture.rows, personal: fixture.personal,
@@ -12,6 +12,7 @@ import RootsPage from "@/app/roots/page";
 import RootDetailPage from "@/app/roots/[root]/page";
 
 beforeEach(() => {fixture.rows = []; fixture.personal = false;});
+afterEach(() => cleanup());
 
 describe("trusted Roots pages", () => {
   it("shows an honest empty state without published Gold links", async () => {

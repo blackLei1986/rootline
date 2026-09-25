@@ -22,8 +22,15 @@ The shell initially lacked `node` on `PATH`, so the first `pnpm test` invocation
 ## Phase 4 gates still to observe
 
 - Product changes and their RED→GREEN tests.
-- Clean disposable-database migration replay and complete pgTAP suite.
 - Integrated authenticated browser journey, responsive widths, conflict/offline, timezone, and two-user isolation.
 - Final full tests, lint, TypeScript, build, product audit, release runbook, review, and integration PR.
 
 Beta readiness remains **undetermined** until those gates have observed results.
+
+## Clean disposable database — 2026-09-25
+
+- Ran Supabase CLI 2.118.0 from an independently verified official release binary against a new temporary project `rootline-phase4-beta-20260925`, database port 56422. The existing `rootline-local` project at port 54322 was not reset. An initial standalone Postgres container was discarded because it lacked the Supabase-managed system schema; its pgTAP failures were invalid environment evidence.
+- The temporary project contained byte-for-byte copies of this branch's 19 migration files and 10 pgTAP files. `pnpm verify:beta-db` checked their hashes, the Docker Compose project/workdir identity, and the marked local database URL before issuing a local-project reset and test.
+- Observed: all 19 migrations applied from a clean database; all 10 pgTAP files and 162 assertions passed, including RLS, Today, Reading, morphology, and Progress suites.
+- CLI 2.118.0 returned `DbResetCancelledError` for the explicit `--db-url` form on both a bare container and the managed stack. Its local-project mode completed the same clean replay. The runner uses the latter only after matching the separate project ID, workdir, port, container, and source-file hashes.
+- Supabase CLI published this temporary project's Docker DB port on `0.0.0.0`, despite the client using `127.0.0.1`. This is an exposure risk for a shared network and must be accounted for in the runbook; the project is disposable and contains no real user data. A loopback-only host firewall or isolated machine is preferable for future verification.

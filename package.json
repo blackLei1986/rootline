@@ -15,6 +15,7 @@
     "audit:rss-reading": "tsx scripts/rss-reading-audit.ts",
     "feeds:audit": "tsx scripts/rss-reading-audit.ts",
     "verify:supabase": "tsx scripts/verify-supabase-connection.ts",
+    "verify:beta-db": "tsx scripts/verify-beta-db.ts",
     "vocab:import": "tsx scripts/vocabulary-cli.ts import",
     "vocab:generate": "tsx scripts/vocabulary-cli.ts generate",
     "vocab:validate": "tsx scripts/vocabulary-cli.ts validate",
