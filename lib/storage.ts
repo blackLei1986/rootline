@@ -42,6 +42,7 @@ let cachedProgress: LearningStorage | null = null;
 export function createWordProgress(wordId: string): WordProgress {
   return {
     wordId,
+    readingRevision: 0,
     status: "new",
     recognitionState: null,
     recognitionConfidence: 0,
