@@ -139,11 +139,13 @@ export class SupabaseMigrationBatchStore implements MigrationBatchStore {
 
 export class SupabaseMigrationEntityWriter implements MigrationEntityWriter {
   private readonly learner: SupabaseLearnerRepository;
+  private readonly guardedLearner: SupabaseLearnerRepository;
   private readonly reading: SupabaseReadingRepository;
   private snapshots = new Map<string, LearningStorage>();
 
-  constructor(private readonly client: DatabaseClient) {
+  constructor(private readonly client: DatabaseClient, guardedWordClient: DatabaseClient = client) {
     this.learner = new SupabaseLearnerRepository(client);
+    this.guardedLearner = new SupabaseLearnerRepository(guardedWordClient);
     this.reading = new SupabaseReadingRepository(client);
   }
 
@@ -194,7 +196,7 @@ export class SupabaseMigrationEntityWriter implements MigrationEntityWriter {
     });
     const merged = mergeLearningState(server, local);
     const selected = merged.words[localWord.wordId];
-    await this.learner.upsertWordState(userId, selected, operationId);
+    await this.guardedLearner.upsertWordState(userId, selected, operationId);
     server.words[localWord.wordId] = structuredClone(selected);
   }
 

@@ -1,15 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { memoryStorageAdapter } from "@/lib/storage-adapter";
+import { getStorageAdapter, memoryStorageAdapter } from "@/lib/storage-adapter";
 import {
   enqueueSyncOperation,
   flushSyncQueue,
   readSyncQueue
 } from "@/lib/sync/offline-queue";
+import { SyncConflictError, discardPendingWordOperations, listPendingWordOperations } from "@/lib/sync/offline-queue";
+import { createWordProgress, getWordProgress, hydrateAuthoritativeWordState, loadProgress, saveProgress } from "@/lib/storage";
 import type { SyncOperation } from "@/types/sync";
 
 describe("offline sync queue", () => {
   beforeEach(() => {
     memoryStorageAdapter.removeItem("rootline-sync-queue");
+    getStorageAdapter().removeItem("rootline-sync-queue");
   });
 
   it("preserves ordered work after a partial failure and never replays an applied id", async () => {
@@ -46,6 +49,36 @@ describe("offline sync queue", () => {
     enqueueSyncOperation(operation("same-id"), memoryStorageAdapter);
     enqueueSyncOperation(operation("same-id"), memoryStorageAdapter);
     expect(readSyncQueue(memoryStorageAdapter)).toHaveLength(1);
+  });
+
+  it("preserves the exact stale word operation and stops automatic retry on a revision conflict", async () => {
+    const stale = operation("old-snapshot");
+    stale.entityId = "adapt";
+    enqueueSyncOperation(stale, memoryStorageAdapter);
+    const result = await flushSyncQueue({adapter: memoryStorageAdapter,
+      transport: async () => {throw new SyncConflictError("READING_REVISION_CONFLICT");}});
+    expect(result.conflict).toEqual({operationId: "old-snapshot", entityId: "adapt"});
+    expect(result.retryAt).toBeNull();
+    expect(readSyncQueue(memoryStorageAdapter)[0]).toEqual(stale);
+  });
+
+  it("exports and discards only the selected word's pending edits after explicit resolution", () => {
+    const stale = {...operation("stale-adapt"), entityId: "adapt", payload: {wordId: "adapt"}};
+    const event = {...operation("event-adapt"), kind: "learning-event" as const, entityId: "event-adapt", payload: {wordId: "adapt", id: "event-adapt"}};
+    const other = {...operation("other-analyze"), entityId: "analyze", payload: {wordId: "analyze"}};
+    [stale, event, other].forEach((item) => enqueueSyncOperation(item, memoryStorageAdapter));
+    expect(listPendingWordOperations("adapt", memoryStorageAdapter)).toEqual([stale, event]);
+    discardPendingWordOperations("adapt", memoryStorageAdapter);
+    expect(readSyncQueue(memoryStorageAdapter)).toEqual([other]);
+  });
+
+  it("hydrates a confirmed server word without queueing another word snapshot", () => {
+    saveProgress({...loadProgress(), words: {adapt: createWordProgress("adapt")}});
+    getStorageAdapter().removeItem("rootline-sync-queue");
+    const server = {...createWordProgress("adapt"), readingRevision: 1, correctCount: 1};
+    hydrateAuthoritativeWordState("adapt", server);
+    expect(getWordProgress("adapt").readingRevision).toBe(1);
+    expect(readSyncQueue().filter((item) => item.kind === "word-state" && item.entityId === "adapt")).toEqual([]);
   });
 });
 

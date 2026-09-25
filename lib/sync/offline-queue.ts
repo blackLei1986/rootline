@@ -13,6 +13,10 @@ type FlushOptions = {
   now?: () => Date;
 };
 
+export class SyncConflictError extends Error {
+  constructor(message = "READING_REVISION_CONFLICT") { super(message); }
+}
+
 export function enqueueSyncOperation(
   operation: SyncOperation,
   adapter: StorageAdapter = getStorageAdapter()
@@ -70,6 +74,24 @@ export function readSyncQueue(
   }
 }
 
+export function listPendingWordOperations(
+  wordId: string, adapter: StorageAdapter = getStorageAdapter()
+): SyncOperation[] {
+  return readSyncQueue(adapter).filter((operation) =>
+    (operation.kind === "word-state" && operation.entityId === wordId)
+    || (operation.kind === "learning-event" && typeof operation.payload === "object"
+      && operation.payload !== null && "wordId" in operation.payload
+      && operation.payload.wordId === wordId));
+}
+
+export function discardPendingWordOperations(
+  wordId: string, adapter: StorageAdapter = getStorageAdapter()
+): void {
+  const discardIds = new Set(listPendingWordOperations(wordId, adapter).map((operation) => operation.id));
+  writeSyncQueue(readSyncQueue(adapter).filter((operation) => !discardIds.has(operation.id)), adapter);
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(SYNC_QUEUE_EVENT));
+}
+
 export async function flushSyncQueue(options: FlushOptions = {}): Promise<FlushResult> {
   const adapter = options.adapter ?? getStorageAdapter();
   const transport = options.transport ?? sendOperation;
@@ -83,7 +105,11 @@ export async function flushSyncQueue(options: FlushOptions = {}): Promise<FlushR
       queue = queue.slice(1);
       writeSyncQueue(queue, adapter);
       applied += 1;
-    } catch {
+    } catch (error) {
+      if (error instanceof SyncConflictError) {
+        return { applied, remaining: queue.length, retryAt: null,
+          conflict: {operationId: queue[0].id, entityId: queue[0].entityId} };
+      }
       return {
         applied,
         remaining: queue.length,
@@ -105,5 +131,9 @@ async function sendOperation(operation: SyncOperation): Promise<void> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(operation)
   });
+  if (response.status === 409) {
+    const body = await response.json().catch(() => null) as {code?: string} | null;
+    if (body?.code === "READING_REVISION_CONFLICT") throw new SyncConflictError();
+  }
   if (!response.ok) throw new Error("Sync operation failed.");
 }

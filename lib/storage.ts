@@ -198,6 +198,13 @@ export function getWordProgress(wordId: string): WordProgress {
   return loadProgress().words[wordId] ?? createWordProgress(wordId);
 }
 
+/** Accept a verified server answer/state without queueing another whole-word upload. */
+export function hydrateAuthoritativeWordState(wordId: string, state: WordProgress): LearningStorage {
+  if (state.wordId !== wordId) throw new Error("Authoritative word ID mismatch.");
+  const current = loadProgress();
+  return saveProgress({...current, words: {...current.words, [wordId]: state}});
+}
+
 export function updateWordProgress(
   wordId: string,
   updater: (current: WordProgress) => WordProgress

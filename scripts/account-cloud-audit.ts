@@ -29,7 +29,8 @@ const checks: AuditCheck[] = [
   { file: "supabase/migrations/202609170001_account_learning.sql", pattern: /create table public\.learner_auxiliary_state/, label: "learner auxiliary table" },
   { file: "supabase/migrations/202609170001_account_learning.sql", pattern: /enable row level security/, label: "RLS enablement" },
   { file: "supabase/migrations/202609170001_account_learning.sql", pattern: /apply_sync_operation/, label: "transactional sync function" },
-  { file: "supabase/tests/account_learning_rls.test.sql", pattern: /owner can insert/, label: "owner allow policy test" },
+  { file: "supabase/tests/account_learning_rls.test.sql", pattern: /owner sees their word state/, label: "owner read policy test" },
+  { file: "supabase/tests/account_learning_rls.test.sql", pattern: /owner cannot bypass the guarded word-state write path/, label: "guarded owner write policy test" },
   { file: "supabase/tests/account_learning_rls.test.sql", pattern: /another user cannot/, label: "cross-user deny policy test" },
   { file: "supabase/tests/account_learning_rls.test.sql", pattern: /anonymous users cannot/, label: "anonymous deny policy test" },
   { file: "docs/account-cloud-setup.md", pattern: /Confirm Email/, label: "deployment and verification guide" }

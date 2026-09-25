@@ -11,15 +11,20 @@ export async function applySyncOperation(
   userId: string,
   operation: SyncOperation
 ): Promise<boolean> {
-  const { data, error } = await client.rpc("apply_sync_operation", {
+  const args = {
     p_user_id: userId,
     p_operation_id: operation.id,
-    p_kind: operation.kind,
     p_entity_id: operation.entityId,
     p_version: operation.version,
     p_payload: toJson(operation.payload)
-  });
+  };
+  const { data, error } = operation.kind === "word-state"
+    ? await client.rpc("apply_guarded_word_state", args)
+    : await client.rpc("apply_sync_operation", {...args, p_kind: operation.kind});
   if (error) {
+    if (error.code === "P0001" && error.message.includes("READING_REVISION_CONFLICT")) {
+      throw new WordStateRevisionConflictError();
+    }
     throw new RepositoryError(
       "PERSISTENCE_UNAVAILABLE",
       "Unable to apply sync operation.",
@@ -27,4 +32,8 @@ export async function applySyncOperation(
     );
   }
   return data;
+}
+
+export class WordStateRevisionConflictError extends Error {
+  constructor() { super("READING_REVISION_CONFLICT"); }
 }

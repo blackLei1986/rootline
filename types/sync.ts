@@ -20,4 +20,5 @@ export interface FlushResult {
   applied: number;
   remaining: number;
   retryAt: string | null;
+  conflict?: { operationId: string; entityId: string };
 }

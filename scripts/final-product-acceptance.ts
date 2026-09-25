@@ -195,7 +195,7 @@ export async function buildFinalProductAcceptance(root: string): Promise<FinalAc
       detail: `final gate ${report.finalGatePassed}, target gate ${report.targetGatePassed}, duplicates ${report.duplicateCandidates.length}, tier-depth issues ${report.tierDepthIssues.length}.`
     },
     { name: "accountFlow", passed: accountAudit.missing.length === 0, detail: accountAudit.missing.length === 0 ? `${accountAudit.checks} account checks passed.` : `${accountAudit.missing.length} account checks missing: ${accountAudit.missing.join("; ")}` },
-    { name: "rls", passed: fileMatches(root, "supabase/tests/account_learning_rls.test.sql", /owner can insert|another user cannot|anonymous users cannot/i), detail: "RLS policy tests reference owner-allow, cross-user-deny, and anonymous-deny assertions." },
+    { name: "rls", passed: fileMatches(root, "supabase/tests/account_learning_rls.test.sql", /owner sees their word state[\s\S]*another user cannot[\s\S]*anonymous users cannot/i), detail: "RLS policy tests cover owner read, cross-user denial, and anonymous denial; owner writes use a guarded server path." },
     { name: "rssSafety", passed: fileExists(root, "tests/feed-network-policy.test.ts") && fileExists(root, "tests/safe-feed-fetch.test.ts"), detail: "SSRF policy and redirect-pivot tests present." },
     { name: "articleDeduplication", passed: fileExists(root, "tests/article-deduplication.test.ts"), detail: "Article deduplication tests present." },
     { name: "candidateLimit", passed: fileMatches(root, "components/reading/for-you.tsx", /slice\(0,\s*3\)/), detail: "Reading hub limits candidates to three." },

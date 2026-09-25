@@ -318,6 +318,16 @@ export interface Database {
       };
     };
     Functions: {
+      apply_guarded_word_state: {
+        Args: {
+          p_user_id: string;
+          p_operation_id: string;
+          p_entity_id: string;
+          p_version: number;
+          p_payload: Json;
+        };
+        Returns: boolean;
+      };
       apply_reading_answer: {
         Args: {
           p_user_id: string;
