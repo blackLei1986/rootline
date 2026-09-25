@@ -55,6 +55,12 @@ export function createTodayEventService(store: TodayEventStore) {
       return await store.getSession(userId, planId) ?? initialSession(plan);
     },
 
+    async wasTodayOperationApplied(userId: string, planId: string, operationId: string): Promise<boolean> {
+      await requireOwnedPlan(store, userId, planId);
+      const result = await store.getOperationResult(userId, operationId);
+      return result?.planId === planId;
+    },
+
     async recordTodayEvent(userId: string, event: TodayEventInput): Promise<TodaySessionDTO> {
       validateEventShape(event);
       const duplicate = await store.getOperationResult(userId, event.operationId);

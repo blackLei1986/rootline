@@ -25,6 +25,15 @@ describe("Today events", () => {
     expect(store.appliedOperations).toHaveLength(1);
   });
 
+  it("confirms only an owned plan's applied operation", async () => {
+    const service = createTodayEventService(new MemoryEventStore(plan()));
+    expect(await service.wasTodayOperationApplied("user-1", PLAN_ID, "missing")).toBe(false);
+    await service.recordTodayEvent("user-1", input("op-confirmed", "today_started", "warmup"));
+    expect(await service.wasTodayOperationApplied("user-1", PLAN_ID, "op-confirmed")).toBe(true);
+    await expect(service.wasTodayOperationApplied("user-2", PLAN_ID, "op-confirmed"))
+      .rejects.toThrow("not found");
+  });
+
   it("resumes at Reading after an article is opened", async () => {
     const store = new MemoryEventStore(plan());
     const service = createTodayEventService(store);

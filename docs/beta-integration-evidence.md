@@ -34,9 +34,9 @@ This document separates local engineering evidence from a production deployment 
 ## Authenticated integrated journey — 2026-09-26
 
 - Used only the disposable local Auth/API stack (`127.0.0.1:56421`) and an isolated Next dev port (3094). No `ROOTLINE_E2E_FIXTURES=1` route mocks, remote service key, production account, or migration change was used.
-- `bash scripts/run-beta-local-e2e.sh` passed. A newly created verified account completed a frozen 30-target plan with partial work, reload/Continue, three Mini Reviews, Final Review, same-day lock, and no second plan after refresh. A second tab's stale write now receives a safe 409 and reloads the authoritative state.
+- `bash scripts/run-beta-local-e2e.sh` passed. A newly created verified account completed a frozen 30-target plan with partial work, reload/Continue, three Mini Reviews, Final Review, same-day lock, and no second plan after refresh. The final regression also chose a wrong answer in both Mini and Final Review without stranding completion. A second tab's stale write receives a safe 409 and reloads the authoritative state.
 - A local published Gold root and three curated articles were inserted as disposable runtime fixtures. The learner opened a word sheet, completed Daily-3 reading and recognition/cloze/recall reinforcement, refreshed the completed session, and confirmed Today remained 30/30. A second account had its own Today plan, no first-account Reading recommendation or Progress completion, and received a sanitized 404 for the first account's Today session.
-- The first account used `Pacific/Kiritimati`; Today, the frozen Daily-3 set, and Progress were checked against its profile-local date across the UTC date boundary. Separate unit tests cover New York DST transition.
+- The first account used `Pacific/Kiritimati`; at the actual run time, Today, the frozen Daily-3 set, and Progress were checked against its profile-local date. This is not a deterministic same-instant UTC-midnight or DST integration test. Separate unit tests cover New York DST transitions; a controlled-clock cross-service test remains open.
 - At 390/430/768/1440 px, the journey checked Today long-answer input and submit control, Reading word dialog and exercises, and Today, Reading, article, Progress, Roots directory/detail, and Me pages for headings, horizontal overflow, clipped interactive controls, and mobile-navigation/footer overlap. This found and fixed the mobile nav being fixed to the sticky header rather than the viewport.
 - The prior authenticated Phase 2C Reading browser spec passed independently (1/1), and the prior Phase 3 Progress browser spec passed independently (1/1) after adding a disposable approved morphology fixture. An initial combined run failed on a two-tab browser-state timing issue and missing Gold fixture; the tests were made deterministic and each relevant suite then passed separately. No unresolved product assertion from that combined attempt remains, but a later final combined gate is still required.
 - After the passing isolated runs, fixture counts were checked: 0 matching Beta/Phase 2C/Phase 3 test users, 0 `example.test` articles, and 0 local-e2e morphology datasets.
@@ -63,9 +63,9 @@ These are one cold/warm local-dev observations, not production p95, user-perceiv
 | --- | --- |
 | Clean disposable migration replay | 19/19 applied in order, no manual intermediate state. |
 | Complete pgTAP | 10 files, 162 assertions, PASS. |
-| Full Vitest | 133 files, 522 tests, PASS. |
+| Full Vitest | Final post-review run: 134 files, 535 tests, PASS. |
 | Focused final product audit | 4/4 tests, PASS. |
-| Authenticated browser acceptance | Integrated journey, near-10K benchmark, Phase 3 Progress, and Phase 2C Reading combined serially: 4/4 PASS. |
+| Authenticated browser acceptance | Final post-review: integrated journey with wrong Mini/Final answers, near-10K benchmark, and Reading-Today: 3/3 PASS; prior Phase 3 Progress and Phase 2C Reading reinforcement: 2/2 PASS. Earlier pre-review combined run: 4/4 PASS. |
 | Responsive | 390/430/768/1440 px checks on primary routes, root detail, Today long answer, Reading word sheet/exercises; PASS. |
 | Isolation and fixture cleanup | Cross-account Today returned 404 without data; no first-account Reading/Progress state; fixture users/articles/states/Gold rows all 0 after run. |
 | Lint, TypeScript, production build | PASS after the production-fixture guard typing correction; webpack build generated 195 static pages. |
@@ -73,5 +73,11 @@ These are one cold/warm local-dev observations, not production p95, user-perceiv
 | Whitespace gate | `git diff --check` PASS. |
 
 The single benchmark sample varied on a warm combined run (Today initial 227 ms, resume 79 ms; Reading list 1,210 ms; article 551 ms; Progress 1,758 ms). This variation reinforces that the measurements are not p95 or a production performance claim.
+
+## Independent branch review and resolution — 2026-09-26
+
+- Read-only review of `4975593..7a22963` found no Critical issues and three Important gaps. The post-review change makes persisted `false` review answers count as answered; retains new/replaced offline operations through in-flight flushes and serializes flushes using browser Web Locks where available; and journals Today learning operations until the server confirms their exact operation ID. Accepted recognition/review/activity credit is applied with a local persisted operation marker, so lost responses, refresh, and same-ID retries do not double-credit SRS or wrong-answer evidence. An unresolved result remains visibly blocked instead of being inferred from a newer session revision.
+- Targeted review regressions cover wrong Mini/Final answers and refresh, enqueue/replacement/conflict during flush, simultaneous flush, accepted lost-response review credit, delayed operation-status race, reload recovery, and cross-account operation status. Final browser journey exercised wrong Mini and Final answers. A minor deterministic cross-service UTC-midnight/DST integration test remains deferred; the timezone claim above is narrowed accordingly.
+- Post-review fixture audit returned `users=0,articles=0,states=0,gold=0`. The disposable Supabase project was stopped afterward; the existing `rootline-local` project remained untouched. No post-review SQL migration changed, so the clean 19-migration/162-assertion replay above remains the database gate.
 
 Local engineering acceptance is green. **External Beta deployment is NOT READY / not authorized**: no target production backup/migration-ledger verification, production smoke approval, reviewed Gold content import, or applicable legal/privacy notice decision was supplied. The release runbook keeps these gates explicit. No production data was touched.

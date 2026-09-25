@@ -1,6 +1,7 @@
 import { LEARNING_ENGINE_CONFIG } from "@/config/learning-engine";
 import { scheduleNextReview } from "@/lib/spaced-repetition";
 import { appendLearningEvent, loadProgress, saveProgress, createWordProgress } from "@/lib/storage";
+import {queueSyncPayload} from "@/lib/sync/offline-queue";
 import type { RecognitionState, ReviewRating, WordProgress } from "@/types/progress";
 
 const clamp = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
@@ -77,25 +78,33 @@ export function recordWordRecognition(
   responseTimeMs: number,
   verificationScheduled: boolean,
   sessionId?: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  todayOperationId?: string
 ): void {
   const storage = loadProgress();
+  if (todayOperationId && storage.appliedTodayOperations?.[todayOperationId]) return;
   const current = storage.words[wordId] ?? createWordProgress(wordId);
-  saveProgress({
-    ...storage,
-    words: {
-      ...storage.words,
-      [wordId]: applyRecognitionResult(current, state, responseTimeMs, verificationScheduled, now)
-    }
-  });
-  appendLearningEvent({
-    id: `${now.getTime()}-${wordId}-${state}`,
-    type: `recognition_${state}`,
+  const event = {
+    id: todayOperationId ?? `${now.getTime()}-${wordId}-${state}`,
+    type: `recognition_${state}` as const,
     timestamp: now.toISOString(),
     wordId,
     sessionId,
     metadata: { responseTimeMs: Math.round(responseTimeMs), verificationScheduled }
+  };
+  saveProgress({
+    ...storage,
+    appliedTodayOperations: todayOperationId
+      ? {...storage.appliedTodayOperations, [todayOperationId]: true as const}
+      : storage.appliedTodayOperations,
+    words: {
+      ...storage.words,
+      [wordId]: applyRecognitionResult(current, state, responseTimeMs, verificationScheduled, now)
+    },
+    events: [...storage.events, event].slice(-500)
   });
+  // The evidence queue is idempotent by event ID, including after a lost response.
+  queueSyncPayload("learning-event", event.id, event);
 }
 
 export function applyVerificationResult(

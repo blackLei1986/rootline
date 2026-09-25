@@ -51,6 +51,55 @@ describe("offline sync queue", () => {
     expect(readSyncQueue(memoryStorageAdapter)).toHaveLength(1);
   });
 
+  it("keeps work enqueued while an earlier operation is in flight", async () => {
+    enqueueSyncOperation(operation("first"), memoryStorageAdapter);
+    const sent: string[] = [];
+    const result = await flushSyncQueue({adapter: memoryStorageAdapter, transport: async (item) => {
+      sent.push(item.id);
+      if (item.id === "first") enqueueSyncOperation(operation("second"), memoryStorageAdapter);
+    }});
+    expect(sent).toEqual(["first", "second"]);
+    expect(result).toEqual({applied: 2, remaining: 0, retryAt: null});
+  });
+
+  it("does not delete a newer coalesced snapshot after acknowledging the old one", async () => {
+    enqueueSyncOperation({...operation("old"), entityId: "inspect"}, memoryStorageAdapter);
+    const sent: string[] = [];
+    await flushSyncQueue({adapter: memoryStorageAdapter, transport: async (item) => {
+      sent.push(item.id);
+      if (item.id === "old") enqueueSyncOperation({...operation("new"), entityId: "inspect"}, memoryStorageAdapter);
+    }});
+    expect(sent).toEqual(["old", "new"]);
+  });
+
+  it("continues with a replacement when the obsolete in-flight snapshot conflicts", async () => {
+    enqueueSyncOperation({...operation("obsolete"), entityId: "inspect"}, memoryStorageAdapter);
+    const sent: string[] = [];
+    const result = await flushSyncQueue({adapter: memoryStorageAdapter, transport: async (item) => {
+      sent.push(item.id);
+      if (item.id === "obsolete") {
+        enqueueSyncOperation({...operation("replacement"), entityId: "inspect"}, memoryStorageAdapter);
+        throw new SyncConflictError();
+      }
+    }});
+    expect(sent).toEqual(["obsolete", "replacement"]);
+    expect(result.conflict).toBeUndefined();
+    expect(readSyncQueue(memoryStorageAdapter)).toEqual([]);
+  });
+
+  it("serializes simultaneous flushes using the same storage adapter", async () => {
+    enqueueSyncOperation(operation("once"), memoryStorageAdapter);
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {release = resolve;});
+    const sent: string[] = [];
+    const transport = async (item: SyncOperation) => {sent.push(item.id); await held;};
+    const first = flushSyncQueue({adapter: memoryStorageAdapter, transport});
+    const second = flushSyncQueue({adapter: memoryStorageAdapter, transport});
+    release?.();
+    await Promise.all([first, second]);
+    expect(sent).toEqual(["once"]);
+  });
+
   it("retains an offline operation until a later transport succeeds", async () => {
     enqueueSyncOperation(operation("offline-1"), memoryStorageAdapter);
     const failed = await flushSyncQueue({adapter: memoryStorageAdapter, transport: async () => {throw new Error("offline");}});

@@ -24,6 +24,7 @@ export const DEFAULT_LEARNING_GOAL: LearningGoal = Object.freeze({
 
 export const EMPTY_STORAGE: LearningStorage = Object.freeze({
   version: STORAGE_VERSION,
+  appliedTodayOperations: {},
   words: {},
   roots: {},
   dailyStats: {},
@@ -144,6 +145,7 @@ export function migrateStorage(value: unknown): LearningStorage {
   );
   return {
     version: STORAGE_VERSION,
+    appliedTodayOperations: candidate.appliedTodayOperations ?? {},
     words: normalizedWords,
     roots: normalizedRoots,
     dailyStats: normalizedDailyStats,

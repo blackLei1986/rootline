@@ -96,10 +96,12 @@ export function recordWordAnswer(
   requestedRating: ReviewRating,
   correct: boolean,
   now: Date = new Date(),
-  metadata: Record<string, string | number | boolean> = {}
+  metadata: Record<string, string | number | boolean> = {},
+  todayOperationId?: string
 ): void {
   const word = getWordById(wordId);
   const storage = loadProgress();
+  if (todayOperationId && storage.appliedTodayOperations?.[todayOperationId]) return;
   const current = storage.words[wordId] ?? createWordProgress(wordId);
   const rating = normalizeRating(requestedRating, correct);
   const schedule = scheduleNextReview({ progress: current, rating, now });
@@ -121,6 +123,9 @@ export function recordWordAnswer(
   const wasNew = current.reviewCount === 0;
   let nextStorage = {
     ...storage,
+    appliedTodayOperations: todayOperationId
+      ? {...storage.appliedTodayOperations, [todayOperationId]: true as const}
+      : storage.appliedTodayOperations,
     words: { ...storage.words, [wordId]: nextWord },
     events: [...storage.events, {
       id: `${now.getTime()}-${wordId}-answer`,

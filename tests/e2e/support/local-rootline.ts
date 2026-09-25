@@ -62,7 +62,7 @@ export async function completeDaily30(page: Page, plan: TodayPlanDTO): Promise<v
     if ((index + 1) % 10 === 0) {
       await expect(page.getByRole("heading", {name: "Mini Review"})).toBeVisible();
       for (let review = 0; review < 3; review++) {
-        await page.getByRole("button", {name: "想起来了"}).click();
+        await page.getByRole("button", {name: index === 9 && review === 0 ? "没想起来" : "想起来了"}).click();
       }
       await expect(page.getByRole("button", {name: "继续下一个 Block"})).toBeVisible();
       await page.getByRole("button", {name: "继续下一个 Block"}).click();
@@ -71,7 +71,7 @@ export async function completeDaily30(page: Page, plan: TodayPlanDTO): Promise<v
   await expect(page.getByRole("heading", {name: "Final Review"})).toBeVisible();
   for (let review = 0; review < 5; review++) {
     if (await page.getByRole("button", {name: "完成今日计划"}).count()) break;
-    await page.getByRole("button", {name: "想起来了"}).click();
+    await page.getByRole("button", {name: review === 0 ? "没想起来" : "想起来了"}).click();
   }
   await page.getByRole("button", {name: "完成今日计划"}).click();
   await expect(page.getByText("今日完成", {exact: true})).toBeVisible();

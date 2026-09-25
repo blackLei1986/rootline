@@ -38,8 +38,14 @@ export async function GET(request: Request) {
   if (viewer instanceof NextResponse) return viewer;
   const planId = new URL(request.url).searchParams.get("planId");
   if (!planId) return NextResponse.json({ message: "缺少 Today 计划。" }, { status: 400 });
+  const operationId = new URL(request.url).searchParams.get("operationId");
+  if (operationId && operationId.length > 300) return NextResponse.json({message: "操作编号无效。"}, {status: 400});
   let session;
   try {
+    if (operationId) {
+      const applied = await createProductionTodayEventService().wasTodayOperationApplied(viewer.userId, planId, operationId);
+      return NextResponse.json({applied}, {headers: {"cache-control": "private, no-store"}});
+    }
     session = await createProductionTodayEventService().getTodaySession(viewer.userId, planId);
   } catch (error) {
     if (error instanceof TodayPlanNotFoundError) {
