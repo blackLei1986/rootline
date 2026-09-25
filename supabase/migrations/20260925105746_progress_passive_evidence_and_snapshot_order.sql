@@ -27,7 +27,7 @@ $$;
 revoke all on function public.progress_passive_word_ids(uuid) from public, anon, authenticated;
 grant execute on function public.progress_passive_word_ids(uuid) to service_role;
 
--- captured_at is the request's observation start, not the eventual write time.
+-- captured_at marks when the word-state read completed, not the eventual write time.
 -- An older request cannot replace a newer same-day stable count if it finishes last.
 create function public.progress_record_stable_snapshot(
   p_user_id uuid,

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createProgressService, type ProgressRepository } from "@/lib/progress/service";
 import { createWordProgress } from "@/lib/storage";
 import type { ProgressPlanDay, ProgressSessionDay } from "@/lib/progress/types";
@@ -18,8 +18,10 @@ function makeHarness(options: {
   sessions?: ProgressSessionDay[]; states?: Map<string, WordProgress>;
   passive?: Set<string>; readingCount?: number;
   failSnapshot?: boolean; failWordRead?: boolean;
+  statesPromise?: Promise<Map<string, WordProgress>>;
 } = {}) {
   const snapshots: Array<{learningDate: string; stableCount: number}> = [];
+  const observations: string[] = [];
   const calls: Array<{method: string; userId: string}> = [];
   const forUser = (method: string, userId: string) => {
     calls.push({method, userId});
@@ -32,12 +34,13 @@ function makeHarness(options: {
     async getStreakPlanDays(userId) {forUser("streak-plans", userId); return options.plans ?? [];},
     async getMatchingSessions(userId) {forUser("sessions", userId); return options.sessions ?? [];},
     async getWordStates(userId) {forUser("states", userId); if (options.failWordRead) throw new Error("source unavailable");
-      return options.states ?? new Map();},
+      return options.statesPromise ?? options.states ?? new Map();},
     async getPassiveWordIds(userId) {forUser("passive", userId); return options.passive ?? new Set();},
     async getTrustedRootLinks() {return [{rootId: "spect-id", rootKey: "spect", wordId: "spectator"}];},
     async getSnapshots(userId) {forUser("snapshots", userId); return snapshots;},
-    async upsertSnapshot(userId, learningDate, stableCount) {
+    async upsertSnapshot(userId, learningDate, stableCount, _catalogVersion, observedAt) {
       forUser("upsert", userId);
+      observations.push(observedAt);
       if (options.failSnapshot) throw new Error("local snapshot store unavailable");
       const index = snapshots.findIndex((snapshot) => snapshot.learningDate === learningDate);
       if (index >= 0) snapshots[index] = {learningDate, stableCount};
@@ -47,7 +50,7 @@ function makeHarness(options: {
   };
   const service = createProgressService({repository,
     getCatalog: async () => ({ids: new Set(["spectator", "adapt"]), version: "2026.09.production-v2"})});
-  return {service, repository, calls, snapshots};
+  return {service, repository, calls, snapshots, observations};
 }
 
 describe("Progress dashboard service", () => {
@@ -101,6 +104,55 @@ describe("Progress dashboard service", () => {
     expect(dashboard.growth).toEqual({available: false, points: [], hasTrend: false, firstObservedDate: null});
     expect(dashboard.vocabulary.stable).toBe(1);
     expect(dashboard.roots[0].stable).toBe(1);
+  });
+
+  it("orders snapshots by when word states were observed, not when a request began", async () => {
+    vi.useFakeTimers();
+    try {
+      const startedAt = new Date("2026-09-25T12:00:00.000Z");
+      const observedAt = new Date("2026-09-25T12:01:00.000Z");
+      vi.setSystemTime(startedAt);
+      let release!: (states: Map<string, WordProgress>) => void;
+      const statesPromise = new Promise<Map<string, WordProgress>>((resolve) => {release = resolve;});
+      const harness = makeHarness({statesPromise});
+      const pending = harness.service.getDashboard(ownerId, startedAt);
+      vi.setSystemTime(observedAt);
+      release(new Map([["spectator", stableWord("spectator")]]));
+      await pending;
+      expect(harness.observations).toEqual([observedAt.toISOString()]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a newer post-review observation when two requests resolve out of start order", async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveFirst!: (states: Map<string, WordProgress>) => void;
+      let resolveSecond!: (states: Map<string, WordProgress>) => void;
+      const firstRead = new Promise<Map<string, WordProgress>>((resolve) => {resolveFirst = resolve;});
+      const secondRead = new Promise<Map<string, WordProgress>>((resolve) => {resolveSecond = resolve;});
+      const harness = makeHarness();
+      let readNumber = 0;
+      let persisted: {count: number; observedAt: string} | null = null;
+      harness.repository.getWordStates = async () => ++readNumber === 1 ? firstRead : secondRead;
+      harness.repository.upsertSnapshot = async (_userId, _date, count, _version, observedAt) => {
+        if (!persisted || observedAt > persisted.observedAt) persisted = {count, observedAt};
+      };
+      vi.setSystemTime(new Date("2026-09-25T12:00:00Z"));
+      const olderRequest = harness.service.getDashboard(ownerId, new Date());
+      vi.setSystemTime(new Date("2026-09-25T12:00:30Z"));
+      const laterRequest = harness.service.getDashboard(ownerId, new Date());
+      vi.setSystemTime(new Date("2026-09-25T12:01:00Z"));
+      resolveSecond(new Map());
+      await laterRequest;
+      vi.setSystemTime(new Date("2026-09-25T12:02:00Z"));
+      resolveFirst(new Map([["spectator", stableWord("spectator")]]));
+      await olderRequest;
+      expect(persisted).toEqual({count: 1, observedAt: "2026-09-25T12:02:00.000Z"});
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("surfaces an authoritative word-state read failure instead of reporting zero vocabulary", async () => {

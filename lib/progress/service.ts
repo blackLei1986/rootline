@@ -29,12 +29,14 @@ export function createProgressService(deps: {repository: ProgressRepository;
     const todayDate = learningDateForTimeZone(now, timeZone);
     const from7 = shiftLearningDate(todayDate, -6);
     const from30 = shiftLearningDate(todayDate, -29);
-    const [firstPlanDate, recentPlans, streakPlans, states, passiveWordIds, trustedLinks, catalog] =
+    const observedStatesPromise = deps.repository.getWordStates(userId)
+      .then((states) => ({states, observedAt: new Date()}));
+    const [firstPlanDate, recentPlans, streakPlans, observedStates, passiveWordIds, trustedLinks, catalog] =
       await Promise.all([
         deps.repository.getFirstPlanDate(userId),
         deps.repository.getRecentPlanDays(userId, from30, todayDate),
         deps.repository.getStreakPlanDays(userId, todayDate),
-        deps.repository.getWordStates(userId),
+        observedStatesPromise,
         deps.repository.getPassiveWordIds(userId),
         deps.repository.getTrustedRootLinks(),
         deps.getCatalog()
@@ -42,14 +44,14 @@ export function createProgressService(deps: {repository: ProgressRepository;
     const plans = [...new Map([...recentPlans, ...streakPlans].map((plan) => [plan.id, plan])).values()];
     const sessions = await deps.repository.getMatchingSessions(userId, plans.map((plan) => plan.id));
     const completion = calculateCompletion(plans, sessions, firstPlanDate, todayDate);
-    const classified = classifyProgressVocabulary(catalog.ids, states, passiveWordIds, now);
+    const classified = classifyProgressVocabulary(catalog.ids, observedStates.states, passiveWordIds, now);
     const roots = aggregateRootMastery(trustedLinks.filter((link) => catalog.ids.has(link.wordId)),
-      states, classified.byWordId, now);
+      observedStates.states, classified.byWordId, now);
 
     let growth: ProgressDashboardDTO["growth"];
     try {
       await deps.repository.upsertSnapshot(userId, todayDate, classified.stable, catalog.version,
-        now.toISOString());
+        observedStates.observedAt.toISOString());
       const snapshots = await deps.repository.getSnapshots(userId, from30, todayDate);
       growth = {available: true, ...buildObservedGrowth(snapshots, todayDate)};
     } catch {
