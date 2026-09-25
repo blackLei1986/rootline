@@ -98,15 +98,17 @@ describe("Supabase Progress repository", () => {
     expect(hasFilter(reading, "lte", "learning_date", "2026-09-25")).toBe(true);
   });
 
-  it("fetches word state row 1001 instead of stopping at the PostgREST first page", async () => {
-    const firstPage = Array.from({length: 1_000}, (_, index) => ({word_id: `word-${index}`,
-      state: createWordProgress(`word-${index}`)}));
-    const fake = fakeClient((query) => ({data: query.range?.[0] === 0 ? firstPage :
-      [{word_id: "word-1000", state: createWordProgress("word-1000")}], error: null}));
-    const states = await new SupabaseProgressRepository(fake.client).getWordStates(owner);
-    expect(states.size).toBe(1_001);
-    expect(fake.calls.map((call) => call.range)).toEqual([[0, 999], [1000, 1999]]);
-    expect(fake.calls.every((call) => hasFilter(call, "eq", "user_id", owner))).toBe(true);
+  it("reads 1,001 word states and a matching observation time in one database statement", async () => {
+    const states = Object.fromEntries(Array.from({length: 1_001}, (_, index) =>
+      [`word-${index}`, createWordProgress(`word-${index}`)]));
+    const fake = fakeClient(() => ({data: [], error: null}), (name) => ({data: name === "progress_word_state_snapshot"
+      ? {observedAt: "2026-09-25T12:00:00Z", states} : [], error: null}));
+    const snapshot = await new SupabaseProgressRepository(fake.client).getWordStates(owner);
+    expect(snapshot.states.size).toBe(1_001);
+    expect(snapshot.observedAt).toBe("2026-09-25T12:00:00Z");
+    expect(fake.rpcCalls).toEqual([{name: "progress_word_state_snapshot", args: {p_user_id: owner},
+      range: null, order: null}]);
+    expect(fake.calls).toHaveLength(0);
   });
 
   it("continues historical plan pages through a 45-day streak and stops at the first missing date", async () => {

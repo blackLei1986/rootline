@@ -34,7 +34,8 @@ function makeHarness(options: {
     async getStreakPlanDays(userId) {forUser("streak-plans", userId); return options.plans ?? [];},
     async getMatchingSessions(userId) {forUser("sessions", userId); return options.sessions ?? [];},
     async getWordStates(userId) {forUser("states", userId); if (options.failWordRead) throw new Error("source unavailable");
-      return options.statesPromise ?? options.states ?? new Map();},
+      const states = await (options.statesPromise ?? options.states ?? new Map());
+      return {states, observedAt: new Date().toISOString()};},
     async getPassiveWordIds(userId) {forUser("passive", userId); return options.passive ?? new Set();},
     async getTrustedRootLinks() {return [{rootId: "spect-id", rootKey: "spect", wordId: "spectator"}];},
     async getSnapshots(userId) {forUser("snapshots", userId); return snapshots;},
@@ -135,7 +136,9 @@ describe("Progress dashboard service", () => {
       const harness = makeHarness();
       let readNumber = 0;
       let persisted: {count: number; observedAt: string} | null = null;
-      harness.repository.getWordStates = async () => ++readNumber === 1 ? firstRead : secondRead;
+      harness.repository.getWordStates = async () => ({
+        states: await (++readNumber === 1 ? firstRead : secondRead), observedAt: new Date().toISOString()
+      });
       harness.repository.upsertSnapshot = async (_userId, _date, count, _version, observedAt) => {
         if (!persisted || observedAt > persisted.observedAt) persisted = {count, observedAt};
       };

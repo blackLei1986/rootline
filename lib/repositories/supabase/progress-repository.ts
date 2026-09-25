@@ -73,14 +73,16 @@ export class SupabaseProgressRepository implements ProgressRepository {
     return output;
   }
 
-  async getWordStates(userId: string): Promise<Map<string, WordProgress>> {
-    const rows = await collectPagedRecords(async (from, to) => {
-      const {data, error} = await this.client.from("word_learning_states")
-        .select("word_id,state").eq("user_id", userId).order("word_id").range(from, to);
-      throwRepositoryError(error, "load Progress word states");
-      return data ?? [];
-    });
-    return new Map(rows.map((row) => [row.word_id, row.state as unknown as WordProgress]));
+  async getWordStates(userId: string): Promise<{states: Map<string, WordProgress>; observedAt: string}> {
+    const {data, error} = await this.client.rpc("progress_word_state_snapshot", {p_user_id: userId});
+    throwRepositoryError(error, "load Progress word states");
+    const snapshot = record(data);
+    const observedAt = snapshot.observedAt;
+    if (typeof observedAt !== "string" || Number.isNaN(Date.parse(observedAt))) {
+      throw new Error("Progress word-state snapshot has no valid observation time.");
+    }
+    return {states: new Map(Object.entries(record(snapshot.states))
+      .map(([wordId, state]) => [wordId, state as WordProgress])), observedAt};
   }
 
   async getPassiveWordIds(userId: string): Promise<Set<string>> {

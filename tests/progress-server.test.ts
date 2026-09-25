@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   adminClient: {kind: "server-admin"},
   receivedClient: null as unknown,
-  upserts: [] as Array<{userId: string; date: string; count: number; version: string}>
+  upserts: [] as Array<{userId: string; date: string; count: number; version: string; observedAt: string}>
 }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase/admin", () => ({createAdminSupabaseClient: () => mocks.adminClient}));
@@ -17,12 +17,12 @@ vi.mock("@/lib/repositories/supabase/progress-repository", () => ({
     async getRecentPlanDays() {return [];}
     async getStreakPlanDays() {return [];}
     async getMatchingSessions() {return [];}
-    async getWordStates() {return new Map();}
+    async getWordStates() {return {states: new Map(), observedAt: "2026-09-25T12:00:01Z"};}
     async getPassiveWordIds() {return new Set(["adapt"]);}
     async getTrustedRootLinks() {return [];}
     async getSnapshots() {return [{learningDate: "2026-09-25", stableCount: 0}];}
-    async upsertSnapshot(userId: string, date: string, count: number, version: string) {
-      mocks.upserts.push({userId, date, count, version});
+    async upsertSnapshot(userId: string, date: string, count: number, version: string, observedAt: string) {
+      mocks.upserts.push({userId, date, count, version, observedAt});
     }
     async countCompletedReadingPractice() {return 0;}
   }
@@ -39,6 +39,7 @@ describe("production Progress wiring", () => {
     expect(mocks.receivedClient).toBe(mocks.adminClient);
     expect(dashboard.vocabulary).toMatchObject({touched: 1, stable: 0});
     expect(mocks.upserts).toEqual([{userId: "00000000-0000-0000-0000-0000000000a1",
-      date: "2026-09-25", count: 0, version: "2026.09.production-v2"}]);
+      date: "2026-09-25", count: 0, version: "2026.09.production-v2",
+      observedAt: "2026-09-25T12:00:01Z"}]);
   });
 });

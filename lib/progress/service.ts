@@ -13,7 +13,7 @@ export interface ProgressRepository {
   getRecentPlanDays(userId: string, fromDate: string, toDate: string): Promise<ProgressPlanDay[]>;
   getStreakPlanDays(userId: string, todayDate: string): Promise<ProgressPlanDay[]>;
   getMatchingSessions(userId: string, planIds: string[]): Promise<ProgressSessionDay[]>;
-  getWordStates(userId: string): Promise<Map<string, WordProgress>>;
+  getWordStates(userId: string): Promise<{states: Map<string, WordProgress>; observedAt: string}>;
   getPassiveWordIds(userId: string): Promise<Set<string>>;
   getTrustedRootLinks(): Promise<TrustedRootLink[]>;
   getSnapshots(userId: string, fromDate: string, toDate: string): Promise<Array<{learningDate: string; stableCount: number}>>;
@@ -29,14 +29,12 @@ export function createProgressService(deps: {repository: ProgressRepository;
     const todayDate = learningDateForTimeZone(now, timeZone);
     const from7 = shiftLearningDate(todayDate, -6);
     const from30 = shiftLearningDate(todayDate, -29);
-    const observedStatesPromise = deps.repository.getWordStates(userId)
-      .then((states) => ({states, observedAt: new Date()}));
     const [firstPlanDate, recentPlans, streakPlans, observedStates, passiveWordIds, trustedLinks, catalog] =
       await Promise.all([
         deps.repository.getFirstPlanDate(userId),
         deps.repository.getRecentPlanDays(userId, from30, todayDate),
         deps.repository.getStreakPlanDays(userId, todayDate),
-        observedStatesPromise,
+        deps.repository.getWordStates(userId),
         deps.repository.getPassiveWordIds(userId),
         deps.repository.getTrustedRootLinks(),
         deps.getCatalog()
@@ -51,7 +49,7 @@ export function createProgressService(deps: {repository: ProgressRepository;
     let growth: ProgressDashboardDTO["growth"];
     try {
       await deps.repository.upsertSnapshot(userId, todayDate, classified.stable, catalog.version,
-        observedStates.observedAt.toISOString());
+        observedStates.observedAt);
       const snapshots = await deps.repository.getSnapshots(userId, from30, todayDate);
       growth = {available: true, ...buildObservedGrowth(snapshots, todayDate)};
     } catch {

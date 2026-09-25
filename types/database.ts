@@ -326,6 +326,10 @@ export interface Database {
       };
     };
     Functions: {
+      progress_word_state_snapshot: {
+        Args: {p_user_id: string};
+        Returns: Json;
+      };
       progress_passive_word_ids: {
         Args: {p_user_id: string};
         Returns: {word_id: string}[];
