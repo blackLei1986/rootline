@@ -20,7 +20,7 @@ This dashboard is an account-scoped view for a verified learner. It is not a his
 
 ## Growth and Reading
 
-- Opening Progress as a verified learner observes and upserts the current stable count for that learner's local date. There is one snapshot per user/date; a later observation on the same date replaces the prior count. Observation time is recorded when the word-state read completes, and the database rejects an older observation that finishes writing after a newer one.
+- Opening Progress as a verified learner observes and upserts the current stable count for that learner's local date. There is one snapshot per user/date; a later observation on the same date replaces the prior count. Observation time comes from the word-state SQL statement, and the database rejects an older observation that finishes writing after a newer one.
 - The growth display uses only actual recorded dates in the recent 30-day window. It does not backfill pre-Phase-3 history or interpolate days without visits. Its first-date label refers to that window, not all-time history. Fewer than two points are described in text, not drawn as a trend. A stable count can decrease after an incorrect answer or substantial overdue time.
 - Reading's optional number counts completed vocabulary-reinforcement sessions for articles dated within the recent seven local learning dates. It is separate from Today completion and the streak. If this bounded source fails, the card is omitted rather than presented as zero.
 - Estimated vocabulary size is deferred. The current catalog and individual learning records do not support a calibrated estimate or confidence interval for unseen words.
