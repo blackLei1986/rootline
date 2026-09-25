@@ -1,6 +1,6 @@
 # Rootline 2.0 — Phase 2C Reading → Vocabulary Reinforcement
 
-**Status:** Conversational design approved; written specification awaiting review
+**Status:** Written specification approved by user on 2026-09-25; implementation plan pending review
 
 **Date:** 2026-09-25
 
@@ -32,6 +32,8 @@ The new session table uses the project's existing `public` schema, has RLS enabl
 ### Sync boundary
 
 Accepted Reading answers return authoritative word progress to the browser; the client hydrates that state and does **not** run `recordWordAnswer` for the same answer. Before a Reading answer, pending sync for its selected word is flushed or a retryable sync warning is shown. Generic word-state sync must be hardened so a stale whole-state upload cannot overwrite a newer server Reading revision. On revision conflict, the original pending local operation is preserved and the client is offered reconciliation; it is never silently acknowledged or substituted with an older state. An unrelated concurrent offline edit to the same word is not assumed to be losslessly mergeable from the existing snapshot payload. Phase 2C accepts an explicit pending-sync conflict rather than losing either edit or pretending cross-device offline merge is complete.
+
+The current schema also grants authenticated clients direct write access to `word_learning_states`, bypassing a sync-only guard. Phase 2C must remove that direct write path and route existing local migration writes through the guarded operation without breaking read access or owner isolation. The same server-owned boundary reserves Phase 2C's `reading-*` event identities against direct authenticated insertion and generic client event sync. Other pre-existing client event semantics are not redesigned in this phase.
 
 ## 4. Evidence model and idempotency
 
