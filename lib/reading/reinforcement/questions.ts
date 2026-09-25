@@ -86,17 +86,28 @@ function makeQuestion(
       choices, acceptedAnswers: [meaning], correctDisplay: meaning};
   }
   if (type === "cloze") {
-    const source = context.text;
-    const surface = source.slice(context.localStart, context.localStart + occurrence.surface.length);
-    if (surface !== occurrence.surface || !/^[A-Za-z]+(?:['’][A-Za-z]+)*$/.test(surface)) return null;
-    const masked = source.slice(0, context.localStart) + "____" + source.slice(context.localStart + surface.length);
-    if (new RegExp(`\\b${escapeRegExp(surface)}\\b`, "iu").test(masked)) return null;
+    const masked = maskedContext(context, occurrence, word);
+    if (!masked) return null;
     return {...base, context: masked, prompt: "按摘要原句填入缺失的英文词形。",
-      acceptedAnswers: [surface], correctDisplay: surface};
+      acceptedAnswers: [occurrence.surface], correctDisplay: occurrence.surface};
   }
   if (!/^[A-Za-z]+(?:['’][A-Za-z]+)*$/.test(word.lemma)) return null;
-  return {...base, context: context.text, prompt: `根据词库释义“${meaning}”和摘要语境，写出英文原形。`,
+  const masked = maskedContext(context, occurrence, word);
+  if (!masked) return null;
+  return {...base, context: masked, prompt: `根据词库释义“${meaning}”和摘要语境，写出英文原形。`,
     acceptedAnswers: [word.lemma], correctDisplay: word.lemma};
+}
+
+function maskedContext(
+  context: {text: string; localStart: number}, occurrence: Occurrence, word: DailyReadingArticleWord
+): string | null {
+  const source = context.text;
+  const surface = source.slice(context.localStart, context.localStart + occurrence.surface.length);
+  if (surface !== occurrence.surface || !/^[A-Za-z]+(?:['’][A-Za-z]+)*$/.test(surface)) return null;
+  const masked = source.slice(0, context.localStart) + "____" + source.slice(context.localStart + surface.length);
+  const forms = new Set([surface, word.lemma, ...(word.surfaceForms ?? [])]);
+  if ([...forms].some((form) => new RegExp(`\\b${escapeRegExp(form)}\\b`, "iu").test(masked))) return null;
+  return masked;
 }
 
 function contextFor(summary: string, occurrence: Occurrence): {text: string; localStart: number} | null {

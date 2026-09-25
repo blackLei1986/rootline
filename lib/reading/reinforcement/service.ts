@@ -22,6 +22,10 @@ export interface ReinforcementAvailability {
   availableCount: number;
   sessionId: string | null;
   status: "not-started" | "active" | "complete";
+  openedCount: number;
+  openedWordIds: string[];
+  practiced: number;
+  correct: number;
 }
 
 export interface ReadingReinforcementDependencies {
@@ -61,22 +65,30 @@ export function createReadingReinforcementService(dependencies: ReadingReinforce
       dependencies.getWordStates?.(userId, ids) ?? {},
       dependencies.getOpenedWordIds?.(userId, articleId) ?? []
     ]);
-    return buildReinforcementQuestions({
+    const questions = buildReinforcementQuestions({
       articleId, summary, summaryTokens, words,
       todayWordIds: current.article.matchedTodayWordIds,
       recentWordIds: current.article.matchedRecent7DayWordIds ?? current.article.matchedRecentWordIds,
       openedWordIds, progressByWordId
     });
+    return {questions, openedWordIds: [...new Set(openedWordIds)]};
   }
 
   return {
     async getAvailability(userId: string, articleId: string): Promise<ReinforcementAvailability | null> {
       const existing = await dependencies.repository.getByArticle?.(userId, articleId);
-      if (existing) return {availableCount: existing.questions.length, sessionId: existing.id, status: existing.status};
+      if (existing) {
+        const opened = await dependencies.getOpenedWordIds?.(userId, articleId) ?? [];
+        const openedWordIds = [...new Set(opened)];
+        return {availableCount: existing.questions.length, sessionId: existing.id, status: existing.status,
+          openedCount: openedWordIds.length, openedWordIds, practiced: existing.outcomes.length,
+          correct: existing.outcomes.filter((item) => item.correct).length};
+      }
       const current = await dependencies.getCurrentArticle(userId, articleId);
       if (!current) return null;
-      const questions = await buildAvailableQuestions(userId, articleId, current);
-      return {availableCount: questions.length, sessionId: null, status: "not-started"};
+      const preview = await buildAvailableQuestions(userId, articleId, current);
+      return {availableCount: preview.questions.length, sessionId: null, status: "not-started",
+        openedCount: preview.openedWordIds.length, openedWordIds: preview.openedWordIds, practiced: 0, correct: 0};
     },
 
     async submitAnswer(userId: string, sessionId: string, questionId: string, answer: string): Promise<
@@ -132,7 +144,7 @@ export function createReadingReinforcementService(dependencies: ReadingReinforce
       if (!current) return {kind: "not-found"};
       const articleState = await dependencies.getArticleState?.(userId, articleId);
       if (!articleState?.completedAt) return {kind: "unfinished"};
-      const questions = await buildAvailableQuestions(userId, articleId, current);
+      const {questions} = await buildAvailableQuestions(userId, articleId, current);
       if (questions.length === 0) return {kind: "empty", availableCount: 0};
       if (!dependencies.repository.createOnce) throw new Error("Reading session persistence is unavailable.");
       const row = await dependencies.repository.createOnce(userId, articleId, current.learningDate, questions);

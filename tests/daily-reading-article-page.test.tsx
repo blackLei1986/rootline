@@ -150,11 +150,15 @@ describe("Daily-3 article page and reader", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<DailyReadingArticle article={article} words={words} summaryTokens={summaryTokens}
       initialState={{openedAt: "2026-09-25T00:00:00Z", completedAt: null}}
-      reinforcement={{availableCount: 3, sessionId: null, status: "not-started"}} />);
+      reinforcement={{availableCount: 3, sessionId: null, status: "not-started", openedCount: 0, openedWordIds: [], practiced: 0, correct: 0}} />);
     expect(screen.queryByRole("button", {name: /快速巩固/})).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", {name: "完成阅读"}));
     expect(await screen.findByRole("button", {name: "快速巩固 3 个词"})).toBeVisible();
     expect(screen.getByText("已完成阅读")).toBeVisible();
+    expect(screen.getByText("今日词再次遇到：1")).toBeVisible();
+    expect(screen.getByText("主动查看：0")).toBeVisible();
+    expect(screen.getByText("巩固练习：0")).toBeVisible();
+    expect(screen.getByText("答对：0")).toBeVisible();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/reading/articles/article-1/evidence",
       expect.objectContaining({body: JSON.stringify({action: "exposure", wordId: "adapt-id"})})));
   });
@@ -166,14 +170,14 @@ describe("Daily-3 article page and reader", () => {
     vi.stubGlobal("fetch", fetchMock);
     const view = render(<DailyReadingArticle article={article} words={words} summaryTokens={summaryTokens}
       initialState={{openedAt: "2026-09-25T00:00:00Z", completedAt: "2026-09-25T01:00:00Z"}}
-      reinforcement={{availableCount: 3, sessionId: null, status: "not-started"}} />);
+      reinforcement={{availableCount: 3, sessionId: null, status: "not-started", openedCount: 0, openedWordIds: [], practiced: 0, correct: 0}} />);
     fireEvent.click(screen.getByRole("button", {name: "快速巩固 3 个词"}));
     await waitFor(() => expect(mocks.routerPush).toHaveBeenCalledWith("/reading/reinforcement/session-1"));
     expect(fetchMock).toHaveBeenCalledWith("/api/reading/articles/article-1/reinforcement", {method: "POST"});
     view.unmount();
     render(<DailyReadingArticle article={article} words={words} summaryTokens={summaryTokens}
       initialState={{openedAt: "2026-09-25T00:00:00Z", completedAt: "2026-09-25T01:00:00Z"}}
-      reinforcement={{availableCount: 0, sessionId: null, status: "not-started"}} />);
+      reinforcement={{availableCount: 0, sessionId: null, status: "not-started", openedCount: 0, openedWordIds: [], practiced: 0, correct: 0}} />);
     expect(screen.queryByRole("button", {name: /快速巩固/})).not.toBeInTheDocument();
   });
 
@@ -191,5 +195,20 @@ describe("Daily-3 article page and reader", () => {
     fetchMock.mockImplementation(async () => ({ok: true, json: async () => ({saved: true})}));
     fireEvent.click(screen.getByRole("button", {name: "重试词汇记录"}));
     await waitFor(() => expect(screen.queryByText(/阅读词汇记录保存失败/)).not.toBeInTheDocument());
+  });
+
+  it("updates the visible open count only after confirmed detail evidence", async () => {
+    const fetchMock = vi.fn(async () => ({ok: true, json: async () => ({saved: true})}));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<DailyReadingArticle article={article} words={words} summaryTokens={summaryTokens}
+      initialState={{openedAt: "2026-09-25T00:00:00Z", completedAt: "2026-09-25T01:00:00Z"}}
+      reinforcement={{availableCount: 3, sessionId: null, status: "not-started", openedCount: 0,
+        openedWordIds: [], practiced: 0, correct: 0}} />);
+    expect(screen.getByText("主动查看：0")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", {name: "Adapt，今日词"}));
+    await waitFor(() => expect(screen.getByText("主动查看：1")).toBeVisible());
+    fireEvent.click(screen.getByRole("button", {name: "关闭词汇详情"}));
+    fireEvent.click(screen.getByRole("button", {name: "Adapt，今日词"}));
+    expect(screen.getByText("主动查看：1")).toBeVisible();
   });
 });

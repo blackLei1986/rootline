@@ -1,6 +1,6 @@
 # Final product acceptance
 
-Generated at 2026-09-24T09:52:38.133Z
+Generated at 2026-09-25T06:13:50.082Z
 
 accepted lemma count: **9750**
 
@@ -8,8 +8,8 @@ accepted lemma count: **9750**
 | --- | --- | --- |
 | acceptedLemmaCount | pass | accepted lemma count 9750 (target 9750). |
 | vocabularyGate | pass | final gate true, target gate true, duplicates 0, tier-depth issues 0. |
-| accountFlow | pass | 27 account checks passed. |
-| rls | pass | RLS policy tests reference owner-allow, cross-user-deny, and anonymous-deny assertions. |
+| accountFlow | pass | 28 account checks passed. |
+| rls | pass | RLS policy tests cover owner read, cross-user denial, and anonymous denial; owner writes use a guarded server path. |
 | rssSafety | pass | SSRF policy and redirect-pivot tests present. |
 | articleDeduplication | pass | Article deduplication tests present. |
 | candidateLimit | pass | Reading hub limits candidates to three. |

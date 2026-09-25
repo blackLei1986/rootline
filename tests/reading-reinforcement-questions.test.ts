@@ -34,7 +34,8 @@ describe("summary-grounded reinforcement questions", () => {
     expect(new Set(result.map((item) => item.wordId))).toEqual(new Set(["adapt", "analyze", "explain"]));
     expect(summary.includes(result[0]!.context)).toBe(true);
     expect(result[1]!.context).toContain("____");
-    expect(summary.includes(result[2]!.context)).toBe(true);
+    expect(result[2]!.context).toContain("____");
+    expect(result[2]!.context.toLowerCase()).not.toMatch(new RegExp(`\\b${result[2]!.wordId}\\b`));
   });
 
   it("uses the displayed inflected surface as the only Cloze answer", () => {
