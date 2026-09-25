@@ -36,6 +36,13 @@ export interface Database {
         state_revision: number;
         client_updated_at: string | null;
       }>;
+      progress_vocabulary_snapshots: TableDefinition<{
+        user_id: string;
+        learning_date: string;
+        stable_count: number;
+        catalog_version: string;
+        captured_at: string;
+      }, "user_id" | "learning_date" | "stable_count" | "catalog_version">;
       reading_reinforcement_sessions: TableDefinition<UserOwnedRow & {
         id: string;
         article_id: string;
@@ -319,6 +326,10 @@ export interface Database {
       };
     };
     Functions: {
+      progress_passive_word_ids: {
+        Args: {p_user_id: string};
+        Returns: {word_id: string}[];
+      };
       apply_guarded_word_state: {
         Args: {
           p_user_id: string;
