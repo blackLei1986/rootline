@@ -1,4 +1,6 @@
 import type { TodayPlanStatus } from "@/types/today";
+import type { RootMasteryRow } from "@/lib/progress/roots";
+import type { GrowthPoint } from "@/lib/progress/growth";
 
 export interface ProgressPlanDay {
   id: string;
@@ -32,3 +34,14 @@ export interface CompletionWindow {
 }
 
 export type ProgressWordState = "touched" | "learning" | "stable";
+
+export interface ProgressDashboardDTO {
+  today: ProgressDay;
+  last7: CompletionWindow;
+  last30: CompletionWindow;
+  streak: number;
+  vocabulary: {touched: number; learning: number; stable: number; stablePercent: number};
+  roots: RootMasteryRow[];
+  growth: {available: boolean; points: GrowthPoint[]; hasTrend: boolean; firstObservedDate: string | null};
+  reading: {completedPracticeSessions7d: number} | null;
+}
