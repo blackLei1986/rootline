@@ -1,0 +1,43 @@
+# Rootline 2.0 Phase 4 — Beta integration design
+
+## Purpose and boundary
+
+Phase 4 makes the already implemented Daily 30 → reviews/SRS → optional Daily-3 Reading → reinforcement → Progress loop coherent and safe for daily Beta use. It does not add a learning mode, expand the catalog, or deploy to production. Success means one verified learner can complete and resume the loop, see consistent results across all five primary destinations, and encounter understandable failures without losing confirmed newer state. Vercel and the existing Supabase project are the deployment-planning targets, not targets for automatic mutation.
+
+## Starting facts and integration strategy
+
+- The validated Phase 3 tip `75265b9` contains the preceding 1B, 2A, 2B, and 2C work in its ancestry. Preserve those commits on `codex/phase-4-beta-integration`; do not reconstruct the features by cherry-picking or silently drop late acceptance fixes.
+- The main checkout was at `48f9087`, while its locally recorded `origin/main` was two commits ahead. The remote could not be contacted during design. Before code integration or PR creation, fetch and inspect the actual latest remote `main`, compare ancestry and diffs, and merge it into the Phase 4 branch. Resolve conflicts explicitly, then rerun all gates. Never force-push or merge directly into `main` as part of Phase 4.
+- Submit one cumulative integration PR to the verified latest `main` when remote access and credentials permit. If they do not, deliver the local branch, verified commit range, and exact PR blocker rather than implying that a PR exists.
+- Existing untracked `supabase/.temp/` in the main checkout is user state. Do not delete or absorb it.
+
+## Product entry and navigation
+
+`/` leads to Today rather than the legacy multi-mode Dashboard. An unauthenticated learner sees a clear sign-in/verification path; a verified learner sees the frozen Today plan or its loading state. Desktop and mobile show Today, Roots, Reading, Progress, Me as the only first-level destinations. Legacy Rapid, Quiz, Course, and Recovery routes/engines remain reusable but are not promoted as parallel primary modes. Mobile bottom navigation has an accessible active state, safe-area padding, and enough content clearance that it does not cover exercise controls.
+
+Today setup shows completed/actual frozen target count, a clearly approximate remaining-time estimate derived from the existing plan estimate and remaining targets, and one Start/Continue action. A plan below 30 retains its real denominator and shortage explanation; no `0/30` or false precision is invented. The first-use explanation is one short on-page note: 30 words daily, roots and families, a brief review after each ten, no extra batch after completion, optional article reinforcement. No tutorial sequence or planner terminology. Completion stays locked to the same-day plan and shows the actual target count, today's roots, Root Core/Support mix, and review result. Reading and Progress are the optional next actions; there is no regenerate or another-30 control.
+
+Roots lists trusted, approved Gold morphology roots and their verified linked word families, with learned/stable progress from existing account-scoped evidence. Existing static root content may enrich matching roots, but cannot make an unverified root appear trusted. Root detail remains exploration, not a second daily planner. Reading keeps frozen Daily-3 and optional vocabulary reinforcement; while Today is incomplete, the Today action has priority. Progress retains its Phase 3 metrics and honest insufficient-history treatment. Me uses the existing account/profile model for account, learning timezone, already supported basic preferences, logout, and actual legal/about links where available; it does not expose planner controls.
+
+## States, data flow, and failure handling
+
+Keep Today plans, sessions, revisions, SRS, Reading recommendations/sessions, and Progress calculations server-owned. Pages consume existing authenticated services rather than rebuilding learner history in the browser. On the five primary routes, use stable route/loading shells where necessary and purposeful empty/error states: no plan yet, no reading recommendation, no learned root words, insufficient Progress history, and unavailable articles. The learner sees a next action, not SQL, Supabase, IDs, or candidate/confidence terms. Use a small shared visual vocabulary for spacing, headings, cards, CTA hierarchy, and focus states; no full redesign.
+
+Preserve the existing offline sync queue and revision/CAS guards. Confirmed newer Today or Reading state is authoritative when an older tab or replay arrives. On conflict, reload the latest server state and explain that progress was synchronized; do not silently overwrite it or promise unsaved work was saved. On temporary disconnection, retain locally queued operations where the current mechanism supports them and show a visible pending/retry state. Avoid expanding into a new offline-first system. Network, timeout, stale-state, and article-unavailable handling should offer retry or a safe return route.
+
+Reuse the profile timezone and Today learning-date helper for Today, Reading Daily-3, and Progress. A UTC midnight or DST boundary must not move a completed plan between local dates. Keep source failures distinct from real zero activity. Audit Today initial/resume, Reading list/article, and Progress aggregation for measured or obvious waste; make only targeted changes. In particular, measure Progress's all-state server JSON read under a near-10K-state local fixture before considering a caching layer.
+
+## Verification architecture
+
+- Create a disposable Supabase stack/database and apply every migration from a clean beginning, without resetting the existing local or remote project. Run the complete pgTAP suite; check grants, RLS, indexes, RPC permissions, and audit protections. Provide one reproducible project-level command while retaining focused tests. Local acceptance accounts and articles are runtime fixtures, not production migrations.
+- Run the full unit/integration suite, lint, TypeScript, production build, and product audit on the integrated branch. Existing tests are not skipped to make the gate green; distinguish intentional placeholders from acceptance evidence.
+- Add and run one real authenticated browser journey using local Supabase and a curated local article: login → frozen Today plan → partial work → refresh/resume → Mini Reviews → Final Review → complete and same-day lock → frozen Daily-3 → article and reinforcement → unchanged Today completion → reflected Progress → Roots and Me. Use at least two users and authenticated/RLS checks for plan, answers, recommendations, Reading state, Progress, and events. Exercise an older second tab, Reading answer conflict, Today revision conflict, and offline replay. Explicitly clean up fixtures.
+- Test the primary product at 390, 430, 768, and 1440 px, including long answers, root detail, article, word sheet, reinforcement, Progress, and Me. Check no horizontal overflow, clipped controls, hidden controls, or unreadable charts. Test local-date rollover, including a timezone differing from UTC.
+
+## Release readiness, not deployment
+
+Document required/optional and browser-safe/server-only environment variables without values; verify service-role and cron secrets never enter client bundles. Confirm Supabase table grants as well as RLS because Data API exposure defaults can change. Produce a migration-first Vercel/Supabase runbook: confirm remote state and backup, apply additive migrations, check database health/permissions, deploy application, run production-safe smoke tests only with separately authorized test state, then monitor errors. Application rollback is a redeploy of the previous build; additive database objects may remain. Database rollback is not automatic or destructive. Include release notes, outstanding risks, and a Beta-ready/not-ready verdict tied to the observed gates.
+
+## Explicit exclusions and open risk
+
+No AI tutor, social/XP features, custom RSS, exercise family, large vocabulary/morphology expansion, complex settings, analytics platform, production migration, or production deploy. The most likely integration risks are stale remote `main`, mismatched old static Roots content, date/revision behavior across two tabs, fixtures accidentally entering a migration, and performance of whole-account Progress reads. Resolve these with evidence, not assumptions. If a critical data-loss or account-isolation issue remains, Beta is not ready regardless of visual polish.
