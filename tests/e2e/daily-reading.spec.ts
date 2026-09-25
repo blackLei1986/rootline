@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const dailyReadingReady = Boolean(
-  process.env.E2E_SUPABASE_READY === "1"
+  process.env.E2E_DAILY_READING_READY === "1"
   && isLocalSupabase(process.env.E2E_SUPABASE_URL)
   && process.env.E2E_DAILY_READING_STORAGE_STATE
   && process.env.E2E_DAILY_READING_ARTICLE_ID
@@ -23,16 +23,19 @@ test("signed-out Daily-3 home remains readable at target viewport widths", async
 });
 
 test("Daily-3 completion survives reload without emitting Today learning events", async ({ browser }) => {
-  test.skip(!dailyReadingReady, "Requires E2E_SUPABASE_READY=1, local Supabase URL, verified-user storage state, a seeded frozen article, and trusted/Support match words.");
+  test.skip(!dailyReadingReady, "Requires E2E_DAILY_READING_READY=1, local Supabase URL, verified-user storage state, a fresh uncompleted frozen article, and trusted/Support match words.");
   await withAuthenticatedPage(browser, async (page) => {
     const todayEventRequests: string[] = [];
     page.on("request", (request) => {
       if (request.method() === "POST" && request.url().includes("/api/today/events")) todayEventRequests.push(request.url());
     });
+    await page.goto("/today");
     const before = await readTodayProgress(page);
     await page.goto(`/reading/daily/${process.env.E2E_DAILY_READING_ARTICLE_ID}`);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await page.getByRole("button", { name: "完成阅读" }).click();
+    const complete = page.getByRole("button", { name: "完成阅读" });
+    await expect(complete, "The E2E article must start uncompleted; reseed this local fixture before rerunning.").toBeVisible({ timeout: 5_000 });
+    await complete.click();
     await expect(page.getByText("已完成阅读")).toBeVisible();
 
     await page.reload();
@@ -43,7 +46,7 @@ test("Daily-3 completion survives reload without emitting Today learning events"
 });
 
 test("authenticated Daily-3 article supports responsive reading and keyboard word details", async ({ browser }) => {
-  test.skip(!dailyReadingReady, "Requires E2E_SUPABASE_READY=1, a local E2E_SUPABASE_URL, verified-user storage state, and a seeded frozen article with trusted/Support match words.");
+  test.skip(!dailyReadingReady, "Requires E2E_DAILY_READING_READY=1, a local E2E_SUPABASE_URL, verified-user storage state, and a seeded frozen article with trusted/Support match words.");
   await withAuthenticatedPage(browser, async (page) => {
     const articleUrl = `/reading/daily/${process.env.E2E_DAILY_READING_ARTICLE_ID}`;
     for (const width of [390, 430, 768, 1280]) {
@@ -74,7 +77,7 @@ test("authenticated Daily-3 article supports responsive reading and keyboard wor
       await expect(dialog).not.toBeVisible();
       await expect(word).toBeFocused();
 
-      const prose = summary.locator("p").first();
+      const prose = summary.locator("p").first().locator("span").first();
       const box = await prose.boundingBox();
       expect(box).not.toBeNull();
       await page.mouse.move(box!.x + 2, box!.y + box!.height / 2);
