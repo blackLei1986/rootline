@@ -35,6 +35,17 @@ export interface Database {
         version: number;
         client_updated_at: string | null;
       }>;
+      reading_reinforcement_sessions: TableDefinition<UserOwnedRow & {
+        id: string;
+        article_id: string;
+        learning_date: string;
+        status: "active" | "complete";
+        revision: number;
+        cursor: number;
+        questions: Json;
+        outcomes: Json;
+        completed_at: string | null;
+      }>;
       learner_auxiliary_state: TableDefinition<UserOwnedRow & {
         root_progress: Json;
         daily_stats: Json;
@@ -307,6 +318,23 @@ export interface Database {
       };
     };
     Functions: {
+      apply_reading_answer: {
+        Args: {
+          p_user_id: string;
+          p_session_id: string;
+          p_question_id: string;
+          p_expected_session_revision: number;
+          p_word_id: string;
+          p_expected_reading_revision: number;
+          p_event_id: string;
+          p_submitted_answer: string;
+          p_correct: boolean;
+          p_event_type: string;
+          p_event_payload: Json;
+          p_next_state: Json;
+        };
+        Returns: Json;
+      };
       create_today_plan: {
         Args: {
           p_user_id: string;

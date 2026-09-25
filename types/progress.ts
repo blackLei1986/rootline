@@ -63,6 +63,8 @@ export interface CalibrationProfile {
 
 export interface WordProgress {
   wordId: string;
+  /** Server Reading answer revision; absent legacy snapshots are revision zero. */
+  readingRevision?: number;
   status: LearningStatus;
   recognitionState: RecognitionState | null;
   recognitionConfidence: number;
