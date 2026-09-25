@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ViewerDTO } from "@/types/auth";
 import type { ReadingEvidenceAction } from "@/lib/reading/reinforcement/service";
+import type { PublicSession } from "@/lib/reading/reinforcement/types";
 
 const evidenceSchema = z.object({
   action: z.enum(["exposure", "detail-open"]),
@@ -25,6 +26,43 @@ export function createReadingEvidencePostHandler(dependencies: {
       return Response.json(result, {headers: {"cache-control": "private, no-store"}});
     } catch {
       return Response.json({error: "READING_EVIDENCE_UNAVAILABLE"}, {status: 503});
+    }
+  };
+}
+
+type StartResult = {kind: "session"; session: PublicSession} | {kind: "empty"; availableCount: 0} | {kind: "not-found"} | {kind: "unfinished"};
+
+export function createReadingSessionStartPostHandler(dependencies: {
+  requireViewer(): Promise<ViewerDTO | Response>;
+  getService(): {startOrResume(userId: string, articleId: string): Promise<StartResult>};
+}) {
+  return async function POST(_request: Request, context: {params: Promise<{id: string}>}): Promise<Response> {
+    const viewer = await dependencies.requireViewer();
+    if (viewer instanceof Response) return viewer;
+    try {
+      const result = await dependencies.getService().startOrResume(viewer.userId, (await context.params).id);
+      if (result.kind === "not-found") return Response.json({error: "READING_ARTICLE_NOT_AVAILABLE"}, {status: 404});
+      if (result.kind === "unfinished") return Response.json({error: "READING_ARTICLE_NOT_FINISHED"}, {status: 409});
+      return Response.json(result, {headers: {"cache-control": "private, no-store"}});
+    } catch {
+      return Response.json({error: "READING_SESSION_UNAVAILABLE"}, {status: 503});
+    }
+  };
+}
+
+export function createReadingSessionGetHandler(dependencies: {
+  requireViewer(): Promise<ViewerDTO | Response>;
+  getService(): {getOwnedSession(userId: string, sessionId: string): Promise<PublicSession | null>};
+}) {
+  return async function GET(_request: Request, context: {params: Promise<{sessionId: string}>}): Promise<Response> {
+    const viewer = await dependencies.requireViewer();
+    if (viewer instanceof Response) return viewer;
+    try {
+      const result = await dependencies.getService().getOwnedSession(viewer.userId, (await context.params).sessionId);
+      if (!result) return Response.json({error: "READING_SESSION_NOT_FOUND"}, {status: 404});
+      return Response.json({session: result}, {headers: {"cache-control": "private, no-store"}});
+    } catch {
+      return Response.json({error: "READING_SESSION_UNAVAILABLE"}, {status: 503});
     }
   };
 }

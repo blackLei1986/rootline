@@ -57,3 +57,19 @@ export type CommitReadingAnswerResult =
   | { kind: "accepted"; row: ReadingSessionRow; wordState: WordProgress }
   | { kind: "duplicate"; row: ReadingSessionRow }
   | { kind: "conflict"; row: ReadingSessionRow };
+
+export type PublicQuestion = Omit<FrozenQuestion, "acceptedAnswers" | "correctDisplay">;
+
+export interface PublicSession {
+  id: string;
+  articleId: string;
+  articleLabel: string;
+  learningDate: string;
+  status: "active" | "complete";
+  cursor: number;
+  total: number;
+  practiced: number;
+  correct: number;
+  currentQuestion: PublicQuestion | null;
+  outcomes: ReadingOutcome[];
+}

@@ -5,11 +5,14 @@ import { SupabaseReadingReinforcementRepository } from "@/lib/repositories/supab
 import { createReadingReinforcementService, type CurrentReadingArticle } from "@/lib/reading/reinforcement/service";
 import { learningDateForTimeZone } from "@/lib/today/local-date";
 import { loadProductionVocabulary } from "@/lib/today/server-service";
+import { SupabaseDailyReadingArticleRepository } from "@/lib/repositories/supabase/daily-reading-article-repository";
+import type { WordProgress } from "@/types/progress";
 
 export function createProductionReadingReinforcementService() {
   const client = createAdminSupabaseClient();
   const snapshots = new SupabaseDailyReadingRecommendationRepository(client);
   const repository = new SupabaseReadingReinforcementRepository(client);
+  const articleStates = new SupabaseDailyReadingArticleRepository(client);
   return createReadingReinforcementService({
     async getCurrentArticle(userId: string, articleId: string): Promise<CurrentReadingArticle | null> {
       const {data, error} = await client.from("profiles").select("timezone").eq("user_id", userId).maybeSingle();
@@ -22,6 +25,21 @@ export function createProductionReadingReinforcementService() {
       return article ? {article, learningDate} : null;
     },
     getVocabulary: loadProductionVocabulary,
+    getArticleState: (userId, articleId) => articleStates.getState(userId, articleId),
+    async getWordStates(userId, wordIds): Promise<Record<string, WordProgress>> {
+      if (wordIds.length === 0) return {};
+      const {data, error} = await client.from("word_learning_states").select("word_id,state")
+        .eq("user_id", userId).in("word_id", wordIds);
+      if (error) throw error;
+      return Object.fromEntries((data ?? []).map((row) => [row.word_id, row.state as unknown as WordProgress]));
+    },
+    async getOpenedWordIds(userId, articleId): Promise<string[]> {
+      const {data, error} = await client.from("review_events").select("word_id")
+        .eq("user_id", userId).eq("event_type", "reading_lookup")
+        .like("client_event_id", `reading-lookup:${articleId}:%`);
+      if (error) throw error;
+      return (data ?? []).flatMap((row) => row.word_id ? [row.word_id] : []);
+    },
     repository
   });
 }
