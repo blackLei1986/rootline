@@ -3,12 +3,13 @@ import { requireVerifiedViewerHttp } from "@/lib/auth/http";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createProductionTodayService } from "@/lib/today/server-service";
 import { getE2ETodayPlan } from "@/lib/today/e2e-fixture";
+import {isLocalTodayFixtureEnabled} from "@/lib/today/fixture-env";
 import { learningDateForTimeZone } from "@/lib/today/local-date";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  if (process.env.ROOTLINE_E2E_FIXTURES === "1") {
+  if (isLocalTodayFixtureEnabled(process.env)) {
     return NextResponse.json(getE2ETodayPlan(), { headers: { "cache-control": "private, no-store" } });
   }
   const viewer = await requireVerifiedViewerHttp();

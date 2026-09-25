@@ -7,6 +7,7 @@ import { SupabaseTodayRepository } from "@/lib/repositories/supabase/today-repos
 import { SupabaseFeedRepository } from "@/lib/repositories/supabase/feed-repository";
 import { recordArticleBundleEncounters } from "@/lib/reading/server-encounters";
 import { getE2ETodaySession, recordE2ETodayEvent } from "@/lib/today/e2e-fixture";
+import {isLocalTodayFixtureEnabled} from "@/lib/today/fixture-env";
 import { RepositoryError } from "@/lib/repositories/contracts";
 import {TodayEventConflictError, TodayPlanNotFoundError} from "@/lib/today/events";
 
@@ -30,7 +31,7 @@ const eventSchema = z.object({
 });
 
 export async function GET(request: Request) {
-  if (process.env.ROOTLINE_E2E_FIXTURES === "1") {
+  if (isLocalTodayFixtureEnabled(process.env)) {
     return NextResponse.json(getE2ETodaySession(), { headers: { "cache-control": "private, no-store" } });
   }
   const viewer = await requireVerifiedViewerHttp();
@@ -50,7 +51,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (process.env.ROOTLINE_E2E_FIXTURES === "1") {
+  if (isLocalTodayFixtureEnabled(process.env)) {
     const event = eventSchema.parse(await request.json());
     return NextResponse.json(recordE2ETodayEvent(event), { headers: { "cache-control": "private, no-store" } });
   }
