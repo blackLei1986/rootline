@@ -8,6 +8,7 @@ import { SupabaseFeedRepository } from "@/lib/repositories/supabase/feed-reposit
 import { recordArticleBundleEncounters } from "@/lib/reading/server-encounters";
 import { getE2ETodaySession, recordE2ETodayEvent } from "@/lib/today/e2e-fixture";
 import { RepositoryError } from "@/lib/repositories/contracts";
+import {TodayEventConflictError, TodayPlanNotFoundError} from "@/lib/today/events";
 
 const eventSchema = z.object({
   operationId: z.string().min(1).max(300),
@@ -36,7 +37,15 @@ export async function GET(request: Request) {
   if (viewer instanceof NextResponse) return viewer;
   const planId = new URL(request.url).searchParams.get("planId");
   if (!planId) return NextResponse.json({ message: "缺少 Today 计划。" }, { status: 400 });
-  const session = await createProductionTodayEventService().getTodaySession(viewer.userId, planId);
+  let session;
+  try {
+    session = await createProductionTodayEventService().getTodaySession(viewer.userId, planId);
+  } catch (error) {
+    if (error instanceof TodayPlanNotFoundError) {
+      return NextResponse.json({message: "Today 计划不存在。"}, {status: 404});
+    }
+    throw error;
+  }
   return NextResponse.json(session, { headers: { "cache-control": "private, no-store" } });
 }
 
@@ -52,8 +61,11 @@ export async function POST(request: Request) {
   try {
     session = await createProductionTodayEventService().recordTodayEvent(viewer.userId, event);
   } catch (error) {
-    if (error instanceof RepositoryError && typeof error.cause === "object" && error.cause !== null
-      && "code" in error.cause && error.cause.code === "40001") {
+    if (error instanceof TodayPlanNotFoundError) {
+      return NextResponse.json({message: "Today 计划不存在。"}, {status: 404});
+    }
+    if (error instanceof TodayEventConflictError || (error instanceof RepositoryError && typeof error.cause === "object"
+      && error.cause !== null && "code" in error.cause && error.cause.code === "40001")) {
       return NextResponse.json({message: "今日进度已变化，请重新读取。"}, {status: 409});
     }
     throw error;

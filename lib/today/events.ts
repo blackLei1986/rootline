@@ -4,6 +4,14 @@ import { selectFinalReviewTargets, selectMiniReviewTargets, type DailyReviewKind
 type DailyTargetActivity = "learning-card" | "association" | "cloze" | "recall";
 type DailyReviewBlock = 1 | 2 | 3;
 
+export class TodayEventConflictError extends Error {
+  constructor() { super("Today session revision is stale."); }
+}
+
+export class TodayPlanNotFoundError extends Error {
+  constructor() { super("Today plan was not found for this user."); }
+}
+
 export type TodayEventType =
   | "today_started"
   | "stage_completed"
@@ -53,6 +61,9 @@ export function createTodayEventService(store: TodayEventStore) {
       if (duplicate) return duplicate;
       const plan = await requireOwnedPlan(store, userId, event.planId);
       const current = await store.getSession(userId, event.planId) ?? initialSession(plan);
+      if (event.expectedRevision !== undefined && event.expectedRevision !== (current.eventRevision ?? 0)) {
+        throw new TodayEventConflictError();
+      }
       if (event.type === "final_review_completed" && current.finalReviewComplete && event.stage === "learn") {
         return store.applyEvent(userId, event, current);
       }
@@ -273,7 +284,7 @@ function requireDailyTarget(
 
 async function requireOwnedPlan(store: TodayEventStore, userId: string, planId: string): Promise<TodayPlan> {
   const plan = await store.getOwnedPlan(userId, planId);
-  if (!plan) throw new Error("Today plan was not found for this user.");
+  if (!plan) throw new TodayPlanNotFoundError();
   return plan;
 }
 

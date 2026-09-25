@@ -8,14 +8,39 @@ import type {Database, Json} from "@/types/database";
 
 const localUrl = process.env.E2E_SUPABASE_URL;
 const serviceKey = process.env.E2E_SERVICE_ROLE_KEY;
-const ready = localUrl === "http://127.0.0.1:54321" && Boolean(serviceKey?.startsWith("sb_secret_"));
+const ready = ["http://127.0.0.1:54321", "http://127.0.0.1:56421"].includes(localUrl ?? "")
+  && Boolean(serviceKey?.startsWith("sb_secret_"));
 const catalog = JSON.parse(readFileSync(resolve(process.cwd(), "data/vocabulary/production-catalog.json"), "utf8")) as Array<{id: string}>;
 const accounts: Array<{id: string; email: string; password: string}> = [];
 let admin: SupabaseClient<Database>;
+let fixtureDatasetId = "";
+let fixtureRootId = "";
+let fixtureRecordId = "";
 
 test.beforeAll(async () => {
   if (!ready) return;
   admin = createClient<Database>(localUrl!, serviceKey!, {auth: {persistSession: false, autoRefreshToken: false}});
+  if (localUrl === "http://127.0.0.1:56421") {
+    fixtureDatasetId = randomUUID();
+    fixtureRootId = randomUUID();
+    fixtureRecordId = randomUUID();
+    const dataset = await admin.from("morphology_datasets").insert({id: fixtureDatasetId,
+      version: `phase3-e2e-${randomUUID()}`, kind: "gold", status: "published", source: "local-e2e",
+      provenance: {}, published_at: new Date().toISOString()});
+    if (dataset.error) throw dataset.error;
+    const root = await admin.from("morphology_roots").insert({id: fixtureRootId, dataset_id: fixtureDatasetId,
+      root_key: "apt", meaning_en: ["fit"], meaning_zh: ["适应"], educational_content: {}, provenance: {}});
+    if (root.error) throw root.error;
+    const record = await admin.from("word_morphology_records").insert({id: fixtureRecordId,
+      dataset_id: fixtureDatasetId, catalog_word_id: "adapt", word: "adapt", lemma: "adapt",
+      primary_root_id: fixtureRootId, confidence: "verified", morphology_score: 100,
+      source: "local-e2e", provenance: {}, review_status: "approved", revision: 1,
+      morphology_expression: "ad + apt", literal_meaning: "fit toward", reviewed_at: new Date().toISOString()});
+    if (record.error) throw record.error;
+    const segment = await admin.from("word_morphology_segments").insert({word_morphology_record_id: fixtureRecordId,
+      position: 0, kind: "root", surface_form: "apt", normalized_form: "apt", root_id: fixtureRootId, provenance: {}});
+    if (segment.error) throw segment.error;
+  }
   for (let index = 0; index < 2; index++) {
     const email = `phase3-${randomUUID()}@example.test`;
     const password = `Phase3-${randomUUID()}-aA1!`;
@@ -49,6 +74,14 @@ test.afterAll(async () => {
   for (const account of accounts) {
     const {error} = await admin.auth.admin.deleteUser(account.id);
     if (error) failures.push(error.message);
+  }
+  if (fixtureRecordId) {
+    const record = await admin.from("word_morphology_records").delete().eq("id", fixtureRecordId);
+    if (record.error) failures.push(record.error.message);
+    const root = await admin.from("morphology_roots").delete().eq("id", fixtureRootId);
+    if (root.error) failures.push(root.error.message);
+    const dataset = await admin.from("morphology_datasets").delete().eq("id", fixtureDatasetId);
+    if (dataset.error) failures.push(dataset.error.message);
   }
   if (failures.length) throw new Error(`Local fixture cleanup failed: ${failures.join("; ")}`);
 });

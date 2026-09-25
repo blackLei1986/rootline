@@ -19,6 +19,7 @@ export function SiteHeader({ account }: { account: AccountDTO | null }) {
   const pathname = usePathname();
   if (pathname.startsWith("/learn") || /\/reading\/[^/]+\/learn/.test(pathname)) return null;
   return (
+    <>
     <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-white/90 backdrop-blur-xl">
       <div className="page-shell flex h-16 items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5 font-bold tracking-tight" aria-label="Rootline 首页">
@@ -36,12 +37,13 @@ export function SiteHeader({ account }: { account: AccountDTO | null }) {
             })}
           </nav><AccountMenu account={account} /></div>
       </div>
+    </header>
       <nav className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 border-t bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_18px_rgba(25,30,60,0.08)] backdrop-blur md:hidden" aria-label="移动主导航">
         {nav.map(({ href, label, icon: Icon }) => {
           const active = href === "/today" ? pathname === "/" || pathname.startsWith("/today") : pathname.startsWith(href);
           return <Link key={href} href={href} aria-current={active ? "page" : undefined} className={cn("flex min-h-14 flex-col items-center justify-center gap-1 text-[10px] font-medium", active ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]")}><Icon className="size-5" /><span>{label}</span></Link>;
         })}
       </nav>
-    </header>
+    </>
   );
 }

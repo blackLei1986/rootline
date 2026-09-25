@@ -1,9 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { createTodayEventService, type TodayEventInput, type TodayEventStore } from "@/lib/today/events";
+import { createTodayEventService, TodayEventConflictError, type TodayEventInput, type TodayEventStore } from "@/lib/today/events";
 import type { TodayPlan, TodaySessionDTO } from "@/types/today";
 import { selectFinalReviewTargets, selectMiniReviewTargets } from "@/lib/today/review-selection";
 
 describe("Today events", () => {
+  it("rejects a stale tab before attempting a duplicate target transition", async () => {
+    const store = new MemoryEventStore(daily30Plan(1));
+    const service = createTodayEventService(store);
+    const started = await service.recordTodayEvent("user-1", input("start-stale", "today_started", "learn"));
+    await store.applyEvent("user-1", input("other-tab", "today_started", "learn"), {...started, eventRevision: 1});
+    await expect(service.recordTodayEvent("user-1", {...dailyInput("stale-recognition", "target_recognized",
+      {targetId: "word-0", block: 1, recognitionState: "known"}), expectedRevision: 0}))
+      .rejects.toBeInstanceOf(TodayEventConflictError);
+  });
   it("persists a duplicate operation only once", async () => {
     const store = new MemoryEventStore(plan());
     const service = createTodayEventService(store);
