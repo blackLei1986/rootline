@@ -50,6 +50,14 @@ function fixture() {
 }
 
 describe("reading practice session", () => {
+  it("previews safe capacity without freezing a session", async () => {
+    const {service, sessions, setArticle} = fixture();
+    expect(await service.getAvailability("owner", "article-1")).toEqual({availableCount: 3, sessionId: null, status: "not-started"});
+    expect(sessions.size).toBe(0);
+    setArticle({...article, summary: "No highlighted target appears here."});
+    expect(await service.getAvailability("owner", "article-1")).toEqual({availableCount: 0, sessionId: null, status: "not-started"});
+  });
+
   it("freezes one answer-key set and returns only public current-question fields", async () => {
     const {service, setVocabulary} = fixture();
     const started = await service.startOrResume("owner", "article-1");

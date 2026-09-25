@@ -3,6 +3,8 @@ import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { SupabaseDailyReadingRecommendationRepository } from "@/lib/repositories/supabase/daily-reading-recommendation-repository";
 import { SupabaseReadingReinforcementRepository } from "@/lib/repositories/supabase/reading-reinforcement-repository";
 import { createReadingReinforcementService, type CurrentReadingArticle } from "@/lib/reading/reinforcement/service";
+import { toPublicSession } from "@/lib/reading/reinforcement/service";
+import type { PublicSession } from "@/lib/reading/reinforcement/types";
 import { learningDateForTimeZone } from "@/lib/today/local-date";
 import { loadProductionVocabulary } from "@/lib/today/server-service";
 import { SupabaseDailyReadingArticleRepository } from "@/lib/repositories/supabase/daily-reading-article-repository";
@@ -42,4 +44,9 @@ export function createProductionReadingReinforcementService() {
     },
     repository
   });
+}
+
+export async function listActiveReadingReinforcementSessions(userId: string): Promise<PublicSession[]> {
+  const repository = new SupabaseReadingReinforcementRepository(createAdminSupabaseClient());
+  return (await repository.listActive(userId, 3)).map(toPublicSession);
 }

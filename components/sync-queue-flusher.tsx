@@ -46,7 +46,7 @@ export function SyncQueueFlusher() {
     };
   }, []);
 
-  async function useCloudVersion() {
+  async function chooseCloudVersion() {
     if (!conflict || !exported || resolving) return;
     if (!window.confirm(`本地 ${conflict.entityId} 的待同步修改将被移除。已导出备份，确定使用云端版本吗？`)) return;
     setResolving(true);
@@ -79,7 +79,7 @@ export function SyncQueueFlusher() {
     {error && <p>{error}</p>}
     <div className="mt-3 flex flex-wrap gap-2">
       <a href={exportUrl} download={`rootline-${conflict.entityId}-pending.json`} onClick={() => setExported(true)}>导出本地修改</a>
-      <button type="button" disabled={!exported || resolving} onClick={() => void useCloudVersion()}>使用云端版本</button>
+      <button type="button" disabled={!exported || resolving} onClick={() => void chooseCloudVersion()}>使用云端版本</button>
       <button type="button" onClick={() => setConflict(null)}>稍后处理</button>
     </div>
   </aside>;

@@ -4,13 +4,15 @@ import type { DailyReadingRecommendationResult } from "@/types/reading-recommend
 
 const mocks = vi.hoisted(() => ({
   getOptionalViewer: vi.fn(),
-  getForToday: vi.fn()
+  getForToday: vi.fn(),
+  listActive: vi.fn()
 }));
 
 vi.mock("@/lib/auth/session", () => ({ getOptionalViewer: mocks.getOptionalViewer }));
 vi.mock("@/lib/reading/server-recommendations", () => ({
   createProductionDailyReadingRecommendationsService: () => ({ getForToday: mocks.getForToday })
 }));
+vi.mock("@/lib/reading/reinforcement/server", () => ({listActiveReadingReinforcementSessions: mocks.listActive}));
 
 import ReadingPage from "@/app/reading/page";
 
@@ -22,6 +24,7 @@ describe("Daily-3 Reading home", () => {
   beforeEach(() => {
     mocks.getOptionalViewer.mockReset();
     mocks.getForToday.mockReset();
+    mocks.listActive.mockReset().mockResolvedValue([]);
   });
 
   afterEach(() => cleanup());
@@ -64,5 +67,15 @@ describe("Daily-3 Reading home", () => {
     render(await ReadingPage());
     expect(screen.getByText("阅读推荐暂时不可用，请稍后重试。" )).toBeVisible();
     expect(screen.queryByText("private failure detail")).not.toBeInTheDocument();
+  });
+
+  it("lists at most three active practice sessions separately from Daily-3", async () => {
+    mocks.getOptionalViewer.mockResolvedValue({userId: "reader-1", email: "reader@example.test", emailVerified: true});
+    mocks.getForToday.mockResolvedValue(emptyResult);
+    mocks.listActive.mockResolvedValue(Array.from({length: 4}, (_, i) => ({id: `session-${i}`, practiced: i, total: 5})));
+    render(await ReadingPage());
+    expect(screen.getByRole("region", {name: "继续词汇巩固"})).toBeVisible();
+    expect(screen.getAllByRole("link", {name: /继续练习/})).toHaveLength(3);
+    expect(screen.queryByRole("link", {name: "继续练习 · 3/5 词"})).not.toBeInTheDocument();
   });
 });

@@ -40,7 +40,9 @@ describe("sync revision conflict recovery", () => {
       conflict: {operationId: "stale", entityId: "adapt"}})
       .mockResolvedValue({applied: 0, remaining: 0, retryAt: null});
     render(<SyncQueueFlusher />);
-    fireEvent.click(await screen.findByRole("link", {name: "导出本地修改"}));
+    const exportLink = await screen.findByRole("link", {name: "导出本地修改"});
+    exportLink.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(exportLink);
     fireEvent.click(await screen.findByRole("button", {name: "使用云端版本"}));
     await waitFor(() => expect(mocks.discardPendingWordOperations).toHaveBeenCalledWith("adapt"));
     expect(mocks.hydrateAuthoritativeWordState).toHaveBeenCalledWith("adapt", {wordId: "adapt", readingRevision: 1});

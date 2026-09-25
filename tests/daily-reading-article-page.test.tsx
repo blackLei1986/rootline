@@ -8,12 +8,13 @@ const mocks = vi.hoisted(() => ({
   getOptionalViewer: vi.fn(),
   loadDailyReadingArticlePageData: vi.fn(),
   notFound: vi.fn(() => { throw new Error("NEXT_NOT_FOUND"); }),
-  redirect: vi.fn((path: string) => { throw new Error(`NEXT_REDIRECT:${path}`); })
+  redirect: vi.fn((path: string) => { throw new Error(`NEXT_REDIRECT:${path}`); }),
+  routerPush: vi.fn()
 }));
 
 vi.mock("@/lib/auth/session", () => ({ getOptionalViewer: mocks.getOptionalViewer }));
 vi.mock("@/lib/reading/server-daily-reading-article-page", () => ({ loadDailyReadingArticlePageData: mocks.loadDailyReadingArticlePageData }));
-vi.mock("next/navigation", () => ({ notFound: mocks.notFound, redirect: mocks.redirect }));
+vi.mock("next/navigation", () => ({ notFound: mocks.notFound, redirect: mocks.redirect, useRouter: () => ({push: mocks.routerPush}) }));
 
 import DailyReadingArticlePage from "@/app/reading/daily/[id]/page";
 
@@ -49,6 +50,7 @@ describe("Daily-3 article page and reader", () => {
     mocks.loadDailyReadingArticlePageData.mockReset();
     mocks.notFound.mockClear();
     mocks.redirect.mockClear();
+    mocks.routerPush.mockClear();
   });
   afterEach(() => cleanup());
 
@@ -128,7 +130,7 @@ describe("Daily-3 article page and reader", () => {
     unmount();
     render(<DailyReadingArticle article={article} words={words} summaryTokens={summaryTokens} initialState={{ openedAt: "2026-09-24T10:00:00.000Z", completedAt: "2026-09-24T11:00:00.000Z" }} />);
     expect(screen.getByText("已完成阅读")).toBeVisible();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/reading/articles/article-1/state", expect.anything());
   });
 
   it("offers a retry after a failed read-state request", async () => {
@@ -139,5 +141,55 @@ describe("Daily-3 article page and reader", () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ state: { openedAt: "2026-09-24T10:00:00.000Z", completedAt: null } }) });
     fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  });
+
+  it("shows optional practice only after confirmed completion and safe capacity", async () => {
+    const fetchMock = vi.fn(async (url: string) => url.endsWith("/state")
+      ? {ok: true, json: async () => ({state: {openedAt: "2026-09-25T00:00:00Z", completedAt: "2026-09-25T01:00:00Z"}})}
+      : {ok: true, json: async () => ({saved: true})});
+    vi.stubGlobal("fetch", fetchMock);
+    render(<DailyReadingArticle article={article} words={words} summaryTokens={summaryTokens}
+      initialState={{openedAt: "2026-09-25T00:00:00Z", completedAt: null}}
+      reinforcement={{availableCount: 3, sessionId: null, status: "not-started"}} />);
+    expect(screen.queryByRole("button", {name: /快速巩固/})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", {name: "完成阅读"}));
+    expect(await screen.findByRole("button", {name: "快速巩固 3 个词"})).toBeVisible();
+    expect(screen.getByText("已完成阅读")).toBeVisible();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/reading/articles/article-1/evidence",
+      expect.objectContaining({body: JSON.stringify({action: "exposure", wordId: "adapt-id"})})));
+  });
+
+  it("starts practice through the verified route and omits the CTA when no safe context exists", async () => {
+    const fetchMock = vi.fn(async (url: string) => url.endsWith("/reinforcement")
+      ? {ok: true, json: async () => ({kind: "session", session: {id: "session-1"}})}
+      : {ok: true, json: async () => ({saved: true})});
+    vi.stubGlobal("fetch", fetchMock);
+    const view = render(<DailyReadingArticle article={article} words={words} summaryTokens={summaryTokens}
+      initialState={{openedAt: "2026-09-25T00:00:00Z", completedAt: "2026-09-25T01:00:00Z"}}
+      reinforcement={{availableCount: 3, sessionId: null, status: "not-started"}} />);
+    fireEvent.click(screen.getByRole("button", {name: "快速巩固 3 个词"}));
+    await waitFor(() => expect(mocks.routerPush).toHaveBeenCalledWith("/reading/reinforcement/session-1"));
+    expect(fetchMock).toHaveBeenCalledWith("/api/reading/articles/article-1/reinforcement", {method: "POST"});
+    view.unmount();
+    render(<DailyReadingArticle article={article} words={words} summaryTokens={summaryTokens}
+      initialState={{openedAt: "2026-09-25T00:00:00Z", completedAt: "2026-09-25T01:00:00Z"}}
+      reinforcement={{availableCount: 0, sessionId: null, status: "not-started"}} />);
+    expect(screen.queryByRole("button", {name: /快速巩固/})).not.toBeInTheDocument();
+  });
+
+  it("keeps the word dialog open when detail evidence fails and offers retry", async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const payload = JSON.parse(String(init?.body ?? "{}")) as {action?: string};
+      if (payload.action === "detail-open") return {ok: false};
+      return {ok: true, json: async () => ({saved: true})};
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<DailyReadingArticle article={article} words={words} summaryTokens={summaryTokens} />);
+    fireEvent.click(screen.getByRole("button", {name: "Adapt，今日词"}));
+    expect(screen.getByRole("dialog", {name: "adapt"})).toBeVisible();
+    expect(await screen.findByText(/阅读词汇记录保存失败/)).toBeVisible();
+    fetchMock.mockImplementation(async () => ({ok: true, json: async () => ({saved: true})}));
+    fireEvent.click(screen.getByRole("button", {name: "重试词汇记录"}));
+    await waitFor(() => expect(screen.queryByText(/阅读词汇记录保存失败/)).not.toBeInTheDocument());
   });
 });

@@ -18,6 +18,12 @@ export interface CurrentReadingArticle {
   learningDate: string;
 }
 
+export interface ReinforcementAvailability {
+  availableCount: number;
+  sessionId: string | null;
+  status: "not-started" | "active" | "complete";
+}
+
 export interface ReadingReinforcementDependencies {
   getCurrentArticle(userId: string, articleId: string): Promise<CurrentReadingArticle | null>;
   getVocabulary(): Promise<ProductionVocabularyEntry[]>;
@@ -36,7 +42,43 @@ export interface ReadingReinforcementDependencies {
 }
 
 export function createReadingReinforcementService(dependencies: ReadingReinforcementDependencies) {
+  async function buildAvailableQuestions(userId: string, articleId: string, current: CurrentReadingArticle) {
+    const vocabulary = await dependencies.getVocabulary();
+    const ids = [...new Set([...current.article.matchedTodayWordIds,
+      ...(current.article.matchedRecent7DayWordIds ?? current.article.matchedRecentWordIds)])];
+    const byId = new Map(vocabulary.map((entry) => [entry.id, entry]));
+    const words: DailyReadingArticleWord[] = ids.flatMap((id) => {
+      const entry = byId.get(id);
+      if (!entry) return [];
+      return [{wordId: id, word: entry.word, lemma: entry.lemma, surfaceForms: entry.surfaceForms,
+        level: current.article.matchedTodayWordIds.includes(id) ? "today" as const : "recent-7-day" as const,
+        coreMeaningZh: entry.coreMeaningZh, coreDefinitionEn: entry.coreDefinitionEn,
+        morphology: null}];
+    });
+    const summary = current.article.summary ?? "";
+    const summaryTokens = buildSummaryTokens(summary, words, vocabulary);
+    const [progressByWordId, openedWordIds] = await Promise.all([
+      dependencies.getWordStates?.(userId, ids) ?? {},
+      dependencies.getOpenedWordIds?.(userId, articleId) ?? []
+    ]);
+    return buildReinforcementQuestions({
+      articleId, summary, summaryTokens, words,
+      todayWordIds: current.article.matchedTodayWordIds,
+      recentWordIds: current.article.matchedRecent7DayWordIds ?? current.article.matchedRecentWordIds,
+      openedWordIds, progressByWordId
+    });
+  }
+
   return {
+    async getAvailability(userId: string, articleId: string): Promise<ReinforcementAvailability | null> {
+      const existing = await dependencies.repository.getByArticle?.(userId, articleId);
+      if (existing) return {availableCount: existing.questions.length, sessionId: existing.id, status: existing.status};
+      const current = await dependencies.getCurrentArticle(userId, articleId);
+      if (!current) return null;
+      const questions = await buildAvailableQuestions(userId, articleId, current);
+      return {availableCount: questions.length, sessionId: null, status: "not-started"};
+    },
+
     async submitAnswer(userId: string, sessionId: string, questionId: string, answer: string): Promise<
       {session: PublicSession; wordState: WordProgress | null} | "conflict" | null
     > {
@@ -90,30 +132,7 @@ export function createReadingReinforcementService(dependencies: ReadingReinforce
       if (!current) return {kind: "not-found"};
       const articleState = await dependencies.getArticleState?.(userId, articleId);
       if (!articleState?.completedAt) return {kind: "unfinished"};
-      const vocabulary = await dependencies.getVocabulary();
-      const ids = [...new Set([...current.article.matchedTodayWordIds,
-        ...(current.article.matchedRecent7DayWordIds ?? current.article.matchedRecentWordIds)])];
-      const byId = new Map(vocabulary.map((entry) => [entry.id, entry]));
-      const words: DailyReadingArticleWord[] = ids.flatMap((id) => {
-        const entry = byId.get(id);
-        if (!entry) return [];
-        return [{wordId: id, word: entry.word, lemma: entry.lemma, surfaceForms: entry.surfaceForms,
-          level: current.article.matchedTodayWordIds.includes(id) ? "today" as const : "recent-7-day" as const,
-          coreMeaningZh: entry.coreMeaningZh, coreDefinitionEn: entry.coreDefinitionEn,
-          morphology: null}];
-      });
-      const summary = current.article.summary ?? "";
-      const summaryTokens = buildSummaryTokens(summary, words, vocabulary);
-      const [progressByWordId, openedWordIds] = await Promise.all([
-        dependencies.getWordStates?.(userId, ids) ?? {},
-        dependencies.getOpenedWordIds?.(userId, articleId) ?? []
-      ]);
-      const questions = buildReinforcementQuestions({
-        articleId, summary, summaryTokens, words,
-        todayWordIds: current.article.matchedTodayWordIds,
-        recentWordIds: current.article.matchedRecent7DayWordIds ?? current.article.matchedRecentWordIds,
-        openedWordIds, progressByWordId
-      });
+      const questions = await buildAvailableQuestions(userId, articleId, current);
       if (questions.length === 0) return {kind: "empty", availableCount: 0};
       if (!dependencies.repository.createOnce) throw new Error("Reading session persistence is unavailable.");
       const row = await dependencies.repository.createOnce(userId, articleId, current.learningDate, questions);
