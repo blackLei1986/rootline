@@ -150,6 +150,12 @@ describe("Supabase Progress repository", () => {
       .toContainEqual(["published_at", false]);
   });
 
+  it("does not trust roots when there is no published Gold dataset", async () => {
+    const fake = fakeClient(() => ({data: null, error: null}));
+    expect(await new SupabaseProgressRepository(fake.client).getTrustedRootLinks()).toEqual([]);
+    expect(fake.calls.some((call) => call.table === "word_morphology_records")).toBe(false);
+  });
+
   it("calls the user-filtered passive RPC and upserts only that owner's current-date row", async () => {
     const fake = fakeClient(() => ({data: null, error: null}),
       {data: [{word_id: "adapt"}, {word_id: "inspect"}], error: null});
