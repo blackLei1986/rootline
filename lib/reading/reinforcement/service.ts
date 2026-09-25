@@ -39,7 +39,7 @@ export interface ReadingReinforcementDependencies {
     getByArticle?(userId: string, articleId: string): Promise<ReadingSessionRow | null>;
     getById?(userId: string, sessionId: string): Promise<ReadingSessionRow | null>;
     createOnce?(userId: string, articleId: string, learningDate: string, questions: ReadingSessionRow["questions"]): Promise<ReadingSessionRow>;
-    getWordState?(userId: string, wordId: string): Promise<WordProgress | null>;
+    getWordSnapshot?(userId: string, wordId: string): Promise<{state: WordProgress; revision: number} | null>;
     commitAnswer?(input: CommitReadingAnswerInput): Promise<CommitReadingAnswerResult>;
   };
   now?: () => Date;
@@ -94,26 +94,27 @@ export function createReadingReinforcementService(dependencies: ReadingReinforce
     async submitAnswer(userId: string, sessionId: string, questionId: string, answer: string): Promise<
       {session: PublicSession; wordState: WordProgress | null} | "conflict" | null
     > {
-      if (!dependencies.repository.getById || !dependencies.repository.getWordState || !dependencies.repository.commitAnswer) {
+      if (!dependencies.repository.getById || !dependencies.repository.getWordSnapshot || !dependencies.repository.commitAnswer) {
         throw new Error("Reading answer persistence is unavailable.");
       }
       const row = await dependencies.repository.getById(userId, sessionId);
       if (!row) return null;
       const previous = row.outcomes.find((outcome) => outcome.questionId === questionId);
-      if (previous) return {session: toPublicSession(row), wordState: await dependencies.repository.getWordState(userId, previous.wordId)};
+      if (previous) return {session: toPublicSession(row), wordState: (await dependencies.repository.getWordSnapshot(userId, previous.wordId))?.state ?? null};
       const question = row.questions[row.cursor];
       if (!question || row.status !== "active" || question.id !== questionId) throw new InvalidReadingQuestionError();
 
       async function attempt(currentRow: ReadingSessionRow): Promise<CommitReadingAnswerResult> {
         const currentQuestion = currentRow.questions[currentRow.cursor];
         if (!currentQuestion || currentQuestion.id !== questionId) throw new InvalidReadingQuestionError();
-        const stored = await dependencies.repository.getWordState!(userId, currentQuestion.wordId);
-        const currentWord = {...createWordProgress(currentQuestion.wordId), ...stored};
+        const snapshot = await dependencies.repository.getWordSnapshot!(userId, currentQuestion.wordId);
+        const currentWord = {...createWordProgress(currentQuestion.wordId), ...snapshot?.state};
         const correct = gradeReinforcementAnswer(currentQuestion, answer);
         const progress = applyReadingResult(currentWord, currentQuestion, correct, dependencies.now?.() ?? new Date());
         return dependencies.repository.commitAnswer!({
           userId, sessionId, questionId, expectedSessionRevision: currentRow.revision,
           wordId: currentQuestion.wordId, expectedReadingRevision: currentWord.readingRevision ?? 0,
+          expectedWordRevision: snapshot?.revision ?? -1,
           eventId: `reading-answer:${sessionId}:${questionId}`,
           submittedAnswer: answer, correct, eventType: progress.eventType,
           eventPayload: progress.metadata, nextWordState: progress.nextState
@@ -125,13 +126,13 @@ export function createReadingReinforcementService(dependencies: ReadingReinforce
         const latest = await dependencies.repository.getById(userId, sessionId);
         if (!latest) return null;
         const saved = latest.outcomes.find((outcome) => outcome.questionId === questionId);
-        if (saved) return {session: toPublicSession(latest), wordState: await dependencies.repository.getWordState(userId, saved.wordId)};
+        if (saved) return {session: toPublicSession(latest), wordState: (await dependencies.repository.getWordSnapshot(userId, saved.wordId))?.state ?? null};
         if (latest.questions[latest.cursor]?.id !== questionId) return "conflict";
         result = await attempt(latest);
       }
       if (result.kind === "conflict") return "conflict";
       const wordState = result.kind === "accepted" ? result.wordState
-        : await dependencies.repository.getWordState(userId, question.wordId);
+        : (await dependencies.repository.getWordSnapshot(userId, question.wordId))?.state ?? null;
       return {session: toPublicSession(result.row), wordState};
     },
 

@@ -33,6 +33,7 @@ export interface Database {
         word_id: string;
         state: Json;
         version: number;
+        state_revision: number;
         client_updated_at: string | null;
       }>;
       reading_reinforcement_sessions: TableDefinition<UserOwnedRow & {
@@ -336,6 +337,7 @@ export interface Database {
           p_expected_session_revision: number;
           p_word_id: string;
           p_expected_reading_revision: number;
+          p_expected_word_revision: number;
           p_event_id: string;
           p_submitted_answer: string;
           p_correct: boolean;

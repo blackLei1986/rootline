@@ -5,7 +5,7 @@ import {
   flushSyncQueue,
   readSyncQueue
 } from "@/lib/sync/offline-queue";
-import { SyncConflictError, discardPendingWordOperations, listPendingWordOperations } from "@/lib/sync/offline-queue";
+import { SyncConflictError, discardConflictingWordStateOperation, listPendingWordOperations } from "@/lib/sync/offline-queue";
 import { createWordProgress, getWordProgress, hydrateAuthoritativeWordState, loadProgress, saveProgress } from "@/lib/storage";
 import type { SyncOperation } from "@/types/sync";
 
@@ -62,14 +62,16 @@ describe("offline sync queue", () => {
     expect(readSyncQueue(memoryStorageAdapter)[0]).toEqual(stale);
   });
 
-  it("exports and discards only the selected word's pending edits after explicit resolution", () => {
+  it("discards only the confirmed conflicting snapshot, preserving later evidence", () => {
     const stale = {...operation("stale-adapt"), entityId: "adapt", payload: {wordId: "adapt"}};
     const event = {...operation("event-adapt"), kind: "learning-event" as const, entityId: "event-adapt", payload: {wordId: "adapt", id: "event-adapt"}};
     const other = {...operation("other-analyze"), entityId: "analyze", payload: {wordId: "analyze"}};
     [stale, event, other].forEach((item) => enqueueSyncOperation(item, memoryStorageAdapter));
     expect(listPendingWordOperations("adapt", memoryStorageAdapter)).toEqual([stale, event]);
-    discardPendingWordOperations("adapt", memoryStorageAdapter);
-    expect(readSyncQueue(memoryStorageAdapter)).toEqual([other]);
+    expect(discardConflictingWordStateOperation("stale-adapt", "adapt", memoryStorageAdapter)).toBe(true);
+    expect(readSyncQueue(memoryStorageAdapter)).toEqual([event, other]);
+    expect(discardConflictingWordStateOperation("event-adapt", "adapt", memoryStorageAdapter)).toBe(false);
+    expect(readSyncQueue(memoryStorageAdapter)).toEqual([event, other]);
   });
 
   it("hydrates a confirmed server word without queueing another word snapshot", () => {

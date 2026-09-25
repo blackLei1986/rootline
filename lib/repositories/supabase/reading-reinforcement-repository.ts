@@ -59,11 +59,11 @@ export class SupabaseReadingReinforcementRepository {
     return (data ?? []) as unknown as ReadingSessionRow[];
   }
 
-  async getWordState(userId: string, wordId: string): Promise<WordProgress | null> {
+  async getWordSnapshot(userId: string, wordId: string): Promise<{state: WordProgress; revision: number} | null> {
     const { data, error } = await this.client.from("word_learning_states")
-      .select("state").eq("user_id", userId).eq("word_id", wordId).maybeSingle();
+      .select("state,state_revision").eq("user_id", userId).eq("word_id", wordId).maybeSingle();
     throwRepositoryError(error, "load reading word state");
-    return data ? data.state as unknown as WordProgress : null;
+    return data ? {state: data.state as unknown as WordProgress, revision: data.state_revision} : null;
   }
 
   async appendWeakEvidence(userId: string, event: WeakReadingEvent): Promise<boolean> {
@@ -88,6 +88,7 @@ export class SupabaseReadingReinforcementRepository {
       p_expected_session_revision: input.expectedSessionRevision,
       p_word_id: input.wordId,
       p_expected_reading_revision: input.expectedReadingRevision,
+      p_expected_word_revision: input.expectedWordRevision,
       p_event_id: input.eventId,
       p_submitted_answer: input.submittedAnswer,
       p_correct: input.correct,

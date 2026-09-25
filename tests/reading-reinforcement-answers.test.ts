@@ -46,15 +46,17 @@ function answerFixture() {
     created_at: now.toISOString(), updated_at: now.toISOString(), completed_at: null
   };
   let word = createWordProgress("adapt");
+  let wordRevision = 0;
   let commits = 0;
   const repository = {
     appendWeakEvidence: async () => true,
     getById: async (userId: string, sessionId: string) => userId === "owner" && sessionId === row.id ? row : null,
-    getWordState: async () => word,
+    getWordSnapshot: async () => ({state: word, revision: wordRevision}),
     commitAnswer: async (input: {questionId: string; nextWordState: typeof word; submittedAnswer: string; correct: boolean}) => {
       commits++;
       if (row.outcomes.some((outcome) => outcome.questionId === input.questionId)) return {kind: "duplicate" as const, row};
       word = input.nextWordState;
+      wordRevision++;
       row = {...row, revision: row.revision + 1, cursor: 1, status: "complete", completed_at: now.toISOString(),
         outcomes: [{questionId: input.questionId, wordId: "adapt", submittedAnswer: input.submittedAnswer,
           correct: input.correct, correctDisplay: "adapt", answeredAt: now.toISOString()}]};
@@ -83,6 +85,71 @@ describe("Reading answer submission", () => {
     const {service, getCommits} = answerFixture();
     await expect(service.submitAnswer("owner", "session-1", "q2", "adapt")).rejects.toThrow("INVALID_READING_QUESTION");
     expect(getCommits()).toBe(0);
+  });
+
+  it("recomputes from a concurrent non-Reading word edit before granting credit", async () => {
+    const row: ReadingSessionRow = {
+      id: "session-1", user_id: "owner", article_id: "article-1", learning_date: "2026-09-25",
+      status: "active", revision: 0, cursor: 0, questions: [question("recall")], outcomes: [],
+      created_at: now.toISOString(), updated_at: now.toISOString(), completed_at: null
+    };
+    let word = createWordProgress("adapt");
+    let revision = 0;
+    let attempts = 0;
+    const service = createReadingReinforcementService({
+      getCurrentArticle: async () => null, getVocabulary: async () => [], now: () => now,
+      repository: {
+        appendWeakEvidence: async () => true,
+        getById: async () => row,
+        getWordSnapshot: async () => ({state: word, revision}),
+        commitAnswer: async (input) => {
+          attempts++;
+          if (attempts === 1) {
+            word = {...word, knownCount: 4};
+            revision++;
+          }
+          if (input.expectedWordRevision !== revision) return {kind: "conflict", row};
+          word = input.nextWordState;
+          revision++;
+          return {kind: "accepted", row: {...row, cursor: 1, revision: 1, status: "complete",
+            completed_at: now.toISOString(), outcomes: [{questionId: "q1", wordId: "adapt",
+              submittedAnswer: "adapt", correct: true, correctDisplay: "adapt", answeredAt: now.toISOString()}]}, wordState: word};
+        }
+      }
+    });
+    const result = await service.submitAnswer("owner", "session-1", "q1", "adapt");
+    if (!result || result === "conflict") throw new Error("Expected a saved answer");
+    expect(result.wordState?.knownCount).toBe(4);
+    expect(result.wordState?.readingRevision).toBe(1);
+    expect(attempts).toBe(2);
+  });
+
+  it("distinguishes a missing word row from an existing revision-zero row", async () => {
+    const row: ReadingSessionRow = {
+      id: "session-1", user_id: "owner", article_id: "article-1", learning_date: "2026-09-25",
+      status: "active", revision: 0, cursor: 0, questions: [question("recall")], outcomes: [],
+      created_at: now.toISOString(), updated_at: now.toISOString(), completed_at: null
+    };
+    const versions: number[] = [];
+    let reads = 0;
+    const service = createReadingReinforcementService({
+      getCurrentArticle: async () => null, getVocabulary: async () => [], now: () => now,
+      repository: {
+        appendWeakEvidence: async () => true,
+        getById: async () => row,
+        getWordSnapshot: async () => ++reads === 1 ? null
+          : {state: {...createWordProgress("adapt"), knownCount: 4}, revision: 0},
+        commitAnswer: async (input) => {
+          versions.push(input.expectedWordRevision);
+          if (input.expectedWordRevision === -1) return {kind: "conflict", row};
+          return {kind: "accepted", row: {...row, status: "complete", cursor: 1}, wordState: input.nextWordState};
+        }
+      }
+    });
+    const result = await service.submitAnswer("owner", "session-1", "q1", "adapt");
+    if (!result || result === "conflict") throw new Error("Expected a saved answer");
+    expect(versions).toEqual([-1, 0]);
+    expect(result.wordState?.knownCount).toBe(4);
   });
 
   it("rejects client-supplied correctness and keeps persistence failure retryable", async () => {

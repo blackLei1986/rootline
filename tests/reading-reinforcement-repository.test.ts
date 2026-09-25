@@ -19,7 +19,7 @@ describe("reading reinforcement repository", () => {
       userId: "00000000-0000-0000-0000-000000000001",
       sessionId: "00000000-0000-0000-0000-000000000099",
       questionId: "q1", expectedSessionRevision: 0, wordId: "adapt",
-      expectedReadingRevision: 0, eventId: "reading-answer:session:q1",
+      expectedReadingRevision: 0, expectedWordRevision: 0, eventId: "reading-answer:session:q1",
       submittedAnswer: "adapt", correct: true, eventType: "quiz_correct",
       eventPayload: {mode: "reading-recall"}, nextWordState: {...createWordProgress("adapt"), readingRevision: 1}
     });
@@ -27,7 +27,7 @@ describe("reading reinforcement repository", () => {
     expect(result.kind).toBe("conflict");
     expect(calls).toEqual([{name: "apply_reading_answer", args: expect.objectContaining({
       p_user_id: "00000000-0000-0000-0000-000000000001",
-      p_question_id: "q1", p_expected_reading_revision: 0,
+      p_question_id: "q1", p_expected_reading_revision: 0, p_expected_word_revision: 0,
       p_event_id: "reading-answer:session:q1", p_correct: true
     })}]);
   });

@@ -17,7 +17,7 @@ select ok(not has_table_privilege('authenticated', 'public.reading_reinforcement
 select ok(not has_table_privilege('anon', 'public.reading_reinforcement_sessions', 'select,insert,update,delete'),
   'anonymous clients have no raw answer-key access');
 select ok(not has_function_privilege('authenticated',
-  'public.apply_reading_answer(uuid,uuid,text,integer,text,integer,text,text,boolean,text,jsonb,jsonb)', 'execute'),
+  'public.apply_reading_answer(uuid,uuid,text,integer,text,integer,text,text,boolean,text,jsonb,jsonb,integer)', 'execute'),
   'authenticated clients cannot call the answer transaction');
 
 insert into auth.users (
@@ -53,7 +53,7 @@ select is(
     'q1', 0, 'adapt', 0,
     'reading-answer:00000000-0000-0000-0000-000000000093:q1',
     'adapted', true, 'quiz_correct', '{"mode":"reading-cloze"}'::jsonb,
-    '{"wordId":"adapt","readingRevision":1,"reviewCount":1}'::jsonb
+    '{"wordId":"adapt","readingRevision":1,"reviewCount":1}'::jsonb, -1
   ) ->> 'kind'), 'accepted', 'first answer commits');
 select is(
   (public.apply_reading_answer(
@@ -61,7 +61,7 @@ select is(
     'q1', 0, 'adapt', 0,
     'reading-answer:00000000-0000-0000-0000-000000000093:q1',
     'adapted', true, 'quiz_correct', '{"mode":"reading-cloze"}'::jsonb,
-    '{"wordId":"adapt","readingRevision":1,"reviewCount":1}'::jsonb
+    '{"wordId":"adapt","readingRevision":1,"reviewCount":1}'::jsonb, -1
   ) ->> 'kind'), 'duplicate', 'replayed answer returns saved result');
 select results_eq($$
   select count(*) from public.review_events
@@ -84,7 +84,7 @@ select is(
     'q2', 0, 'adapt', 0,
     'reading-answer:00000000-0000-0000-0000-000000000095:q2',
     'adapt', true, 'quiz_correct', '{"mode":"reading-recall"}'::jsonb,
-    '{"wordId":"adapt","readingRevision":1,"reviewCount":1}'::jsonb
+    '{"wordId":"adapt","readingRevision":1,"reviewCount":1}'::jsonb, 0
   ) ->> 'kind'), 'conflict', 'stale word revision cannot claim a second session');
 select results_eq($$
   select cursor from public.reading_reinforcement_sessions
@@ -98,7 +98,7 @@ select throws_ok($$
   select public.apply_reading_answer(
     '00000000-0000-0000-0000-000000000099', '00000000-0000-0000-0000-000000000093',
     'q1', 0, 'adapt', 0, 'reading-answer:forged', 'adapted', true,
-    'quiz_correct', '{}'::jsonb, '{"wordId":"adapt","readingRevision":1}'::jsonb)
+    'quiz_correct', '{}'::jsonb, '{"wordId":"adapt","readingRevision":1}'::jsonb, 0)
 $$, 'P0002', null, 'foreign owner cannot claim a session');
 reset role;
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { hydrateAuthoritativeWordState } from "@/lib/storage";
 import {
-  discardPendingWordOperations, flushSyncQueue, listPendingWordOperations, SYNC_QUEUE_EVENT
+  discardConflictingWordStateOperation, flushSyncQueue, listPendingWordOperations, SYNC_QUEUE_EVENT
 } from "@/lib/sync/offline-queue";
 import type { WordProgress } from "@/types/progress";
 
@@ -59,7 +59,9 @@ export function SyncQueueFlusher() {
       if (!state || state.wordId !== conflict.entityId || !Number.isInteger(state.readingRevision)) {
         throw new Error("invalid word-state response");
       }
-      discardPendingWordOperations(conflict.entityId);
+      if (!discardConflictingWordStateOperation(conflict.operationId, conflict.entityId)) {
+        throw new Error("conflicting operation changed");
+      }
       hydrateAuthoritativeWordState(conflict.entityId, state);
       setConflict(null);
       setExported(false);

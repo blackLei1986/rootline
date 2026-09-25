@@ -45,6 +45,7 @@ export interface CommitReadingAnswerInput {
   expectedSessionRevision: number;
   wordId: string;
   expectedReadingRevision: number;
+  expectedWordRevision: number;
   eventId: string;
   submittedAnswer: string;
   correct: boolean;

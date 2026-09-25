@@ -28,9 +28,11 @@ select is(public.apply_guarded_word_state(
   '00000000-0000-0000-0000-000000000081', 'initial', 'adapt', 1,
   '{"wordId":"adapt","readingRevision":0,"reviewCount":0}'::jsonb), false,
   'same operation ID is idempotent');
+do $$ begin perform set_config('rootline.expected_word_revision', '0', true); end $$;
 update public.word_learning_states
 set state = '{"wordId":"adapt","readingRevision":1,"reviewCount":1}'::jsonb
 where user_id = '00000000-0000-0000-0000-000000000081' and word_id = 'adapt';
+do $$ begin perform set_config('rootline.expected_word_revision', '', true); end $$;
 select throws_ok($$
   select public.apply_guarded_word_state(
     '00000000-0000-0000-0000-000000000081', 'stale', 'adapt', 2,

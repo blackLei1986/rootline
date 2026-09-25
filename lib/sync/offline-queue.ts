@@ -84,12 +84,15 @@ export function listPendingWordOperations(
       && operation.payload.wordId === wordId));
 }
 
-export function discardPendingWordOperations(
-  wordId: string, adapter: StorageAdapter = getStorageAdapter()
-): void {
-  const discardIds = new Set(listPendingWordOperations(wordId, adapter).map((operation) => operation.id));
-  writeSyncQueue(readSyncQueue(adapter).filter((operation) => !discardIds.has(operation.id)), adapter);
+export function discardConflictingWordStateOperation(
+  operationId: string, wordId: string, adapter: StorageAdapter = getStorageAdapter()
+): boolean {
+  const queue = readSyncQueue(adapter);
+  const operation = queue.find((item) => item.id === operationId);
+  if (operation?.kind !== "word-state" || operation.entityId !== wordId) return false;
+  writeSyncQueue(queue.filter((item) => item.id !== operationId), adapter);
   if (typeof window !== "undefined") window.dispatchEvent(new Event(SYNC_QUEUE_EVENT));
+  return true;
 }
 
 export async function flushSyncQueue(options: FlushOptions = {}): Promise<FlushResult> {

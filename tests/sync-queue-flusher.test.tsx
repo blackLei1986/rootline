@@ -5,14 +5,14 @@ import { SyncQueueFlusher } from "@/components/sync-queue-flusher";
 const mocks = vi.hoisted(() => ({
   flushSyncQueue: vi.fn(),
   listPendingWordOperations: vi.fn(),
-  discardPendingWordOperations: vi.fn(),
+  discardConflictingWordStateOperation: vi.fn(),
   hydrateAuthoritativeWordState: vi.fn()
 }));
 vi.mock("@/lib/sync/offline-queue", () => ({
   SYNC_QUEUE_EVENT: "rootline-sync-queue-updated",
   flushSyncQueue: mocks.flushSyncQueue,
   listPendingWordOperations: mocks.listPendingWordOperations,
-  discardPendingWordOperations: mocks.discardPendingWordOperations
+  discardConflictingWordStateOperation: mocks.discardConflictingWordStateOperation
 }));
 vi.mock("@/lib/storage", () => ({ hydrateAuthoritativeWordState: mocks.hydrateAuthoritativeWordState }));
 
@@ -21,6 +21,7 @@ describe("sync revision conflict recovery", () => {
     vi.clearAllMocks();
     mocks.flushSyncQueue.mockResolvedValue({applied: 0, remaining: 1, retryAt: null,
       conflict: {operationId: "stale", entityId: "adapt"}});
+    mocks.discardConflictingWordStateOperation.mockReturnValue(true);
     mocks.listPendingWordOperations.mockReturnValue([{id: "stale", kind: "word-state", entityId: "adapt"}]);
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -29,7 +30,7 @@ describe("sync revision conflict recovery", () => {
     render(<SyncQueueFlusher />);
     expect(await screen.findByRole("alert")).toHaveTextContent("adapt");
     expect(screen.getByRole("link", {name: "导出本地修改"})).toBeVisible();
-    expect(mocks.discardPendingWordOperations).not.toHaveBeenCalled();
+    expect(mocks.discardConflictingWordStateOperation).not.toHaveBeenCalled();
     expect(mocks.hydrateAuthoritativeWordState).not.toHaveBeenCalled();
   });
 
@@ -44,7 +45,7 @@ describe("sync revision conflict recovery", () => {
     exportLink.addEventListener("click", (event) => event.preventDefault());
     fireEvent.click(exportLink);
     fireEvent.click(await screen.findByRole("button", {name: "使用云端版本"}));
-    await waitFor(() => expect(mocks.discardPendingWordOperations).toHaveBeenCalledWith("adapt"));
+    await waitFor(() => expect(mocks.discardConflictingWordStateOperation).toHaveBeenCalledWith("stale", "adapt"));
     expect(mocks.hydrateAuthoritativeWordState).toHaveBeenCalledWith("adapt", {wordId: "adapt", readingRevision: 1});
   });
 });
