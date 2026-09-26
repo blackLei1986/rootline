@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReadingReinforcement } from "@/components/reading/reading-reinforcement";
 import type { PublicSession } from "@/lib/reading/reinforcement/types";
 import type { FlushResult, SyncOperation } from "@/types/sync";
+import { readBetaLog, setBetaParticipation } from "@/lib/beta/validation-store";
 
 const mocks = vi.hoisted(() => ({
   listPendingWordOperations: vi.fn((): SyncOperation[] => []),
@@ -43,6 +44,19 @@ describe("optional reading reinforcement UI", () => {
     await waitFor(() => expect(screen.getByText("第 2 / 2 题")).toBeVisible());
     expect(screen.getByText(/回答正确/)).toBeVisible();
     expect(mocks.hydrateAuthoritativeWordState).toHaveBeenCalledWith("adapt", {wordId: "adapt", readingRevision: 1});
+  });
+
+  it("counts Reading completion only after a confirmed transition to the complete state", async () => {
+    localStorage.clear();
+    setBetaParticipation("beta-user", true);
+    const completed: PublicSession = {...base, status: "complete", cursor: 2, total: 2, practiced: 2, correct: 1, currentQuestion: null,
+      outcomes: [{questionId: "q1", wordId: "adapt", submittedAnswer: "adapt", correct: true, correctDisplay: "adapt", answeredAt: "2026-09-26T08:00:00.000Z"}]};
+    vi.stubGlobal("fetch", vi.fn(async () => ({ok: true, json: async () => ({session: completed, wordState: null})})));
+    render(<ReadingReinforcement initialSession={base} betaUserId="beta-user" />);
+    fireEvent.change(screen.getByRole("textbox", {name: "你的答案"}), {target: {value: "adapt"}});
+    fireEvent.click(screen.getByRole("button", {name: "提交答案"}));
+    await screen.findByText(/已完成 2 个词/);
+    expect(readBetaLog("beta-user").days.reduce((sum, day) => sum + day.readingCompletions, 0)).toBe(1);
   });
 
   it("renders a persisted cursor and a read-only completed result", () => {

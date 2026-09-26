@@ -6,8 +6,9 @@ import { hydrateAuthoritativeWordState } from "@/lib/storage";
 import { flushSyncQueue, listPendingWordOperations } from "@/lib/sync/offline-queue";
 import type { PublicSession, ReadingOutcome } from "@/lib/reading/reinforcement/types";
 import type { WordProgress } from "@/types/progress";
+import { recordBetaEvent } from "@/lib/beta/validation-store";
 
-export function ReadingReinforcement({initialSession}: {initialSession: PublicSession}) {
+export function ReadingReinforcement({initialSession, betaUserId}: {initialSession: PublicSession; betaUserId?: string}) {
   const [session, setSession] = useState(initialSession);
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
@@ -46,6 +47,11 @@ export function ReadingReinforcement({initialSession}: {initialSession: PublicSe
       const outcome = body.session.outcomes.find((item) => item.questionId === question.id);
       if (!outcome) throw new Error("Confirmed answer is missing.");
       if (body.wordState?.wordId === question.wordId) hydrateAuthoritativeWordState(question.wordId, body.wordState);
+      if (betaUserId && session.status !== "complete" && body.session.status === "complete") {
+        const today = new Date();
+        const learningDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        recordBetaEvent(betaUserId, learningDate, {type: "reading-completed"});
+      }
       setSession(body.session);
       setFeedback(outcome);
       setAnswer("");

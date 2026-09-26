@@ -12,5 +12,5 @@ export default async function ReadingReinforcementPage({params}: {params: Promis
   if (!viewer?.emailVerified) redirect(`/login?next=${encodeURIComponent(`/reading/reinforcement/${sessionId}`)}`);
   const session = await createProductionReadingReinforcementService().getOwnedSession(viewer.userId, sessionId);
   if (!session) notFound();
-  return <ReadingReinforcement initialSession={session} />;
+  return <ReadingReinforcement initialSession={session} betaUserId={viewer.userId} />;
 }

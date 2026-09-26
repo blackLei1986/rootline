@@ -15,6 +15,7 @@ export type BetaDay = {
   sourceCounts: Record<string, number>;
   reviewOutcomes: Record<string, { correct: number; total: number }>;
   readingOpens: number;
+  todayOpens: number;
   readingCompletions: number;
   progressOpens: number;
   recoverableErrors: number;
@@ -33,6 +34,7 @@ export type BetaEvent =
   | { type: "activity-duration"; activity: string; milliseconds: number }
   | { type: "review-outcome"; source: string; correct: boolean }
   | { type: "reading-open" }
+  | { type: "today-open" }
   | { type: "reading-completed" }
   | { type: "progress-open" }
   | { type: "recoverable-error" }
@@ -99,7 +101,7 @@ export function readBetaLog(userId: string): BetaValidationLog {
 }
 
 function newDay(learningDate: string): BetaDay {
-  return { learningDate, planObserved: false, targetCount: 0, activeMilliseconds: 0, activityMilliseconds: {}, sourceCounts: {}, reviewOutcomes: {}, readingOpens: 0, readingCompletions: 0, progressOpens: 0, recoverableErrors: 0, conflictRecoveries: 0, routeTimings: {} };
+  return { learningDate, planObserved: false, targetCount: 0, activeMilliseconds: 0, activityMilliseconds: {}, sourceCounts: {}, reviewOutcomes: {}, todayOpens: 0, readingOpens: 0, readingCompletions: 0, progressOpens: 0, recoverableErrors: 0, conflictRecoveries: 0, routeTimings: {} };
 }
 
 function finiteCount(value: unknown): number {
@@ -151,6 +153,7 @@ export function recordBetaEvent(userId: string, learningDate: string, event: Bet
         break;
       }
       case "reading-open": day.readingOpens++; break;
+      case "today-open": day.todayOpens++; break;
       case "reading-completed": day.readingCompletions++; break;
       case "progress-open": day.progressOpens++; break;
       case "recoverable-error": day.recoverableErrors++; break;
