@@ -69,6 +69,8 @@ export interface DailyTargetSnapshot {
 }
 
 export interface TodayPlanDTO extends Omit<TodayPlan, "article"> {
+  /** Transient response metadata; never persisted in the frozen plan snapshot. */
+  planCreated?: boolean;
   warmupReviewEntries: ProductionVocabularyEntry[];
   article: (TodayArticleSelection & { text: string }) | null;
 }

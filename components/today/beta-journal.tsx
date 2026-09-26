@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { getBetaParticipation, readBetaLog, recordBetaEvent } from "@/lib/beta/validation-store";
+import { readBetaLog, recordBetaEvent } from "@/lib/beta/validation-store";
+import { useBetaParticipation } from "@/lib/beta/use-beta-participation";
 
 type RatingKey = "difficulty" | "fatigue" | "rootUsefulness" | "reviewUsefulness";
 const ratingQuestions: Array<{key: RatingKey; label: string}> = [
@@ -17,7 +18,8 @@ export function BetaJournal({userId, learningDate}: {userId: string; learningDat
   const [ratings, setRatings] = useState<Partial<Record<RatingKey, number>>>(previous?.ratings ?? {});
   const [continueTomorrow, setContinueTomorrow] = useState<boolean | null>(previous?.continueTomorrow ?? null);
   const [note, setNote] = useState(previous?.note ?? "");
-  if (!getBetaParticipation(userId) || dismissed || saved) return null;
+  const participating = useBetaParticipation(userId);
+  if (!participating || dismissed || saved) return null;
   function submit() {
     if (ratingQuestions.some(({key}) => !ratings[key]) || continueTomorrow === null) return;
     recordBetaEvent(userId, learningDate, {type: "journal", ratings: ratings as Required<typeof ratings>, continueTomorrow, note});

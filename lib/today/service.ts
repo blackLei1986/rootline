@@ -41,11 +41,11 @@ export function createTodayService(dependencies: TodayServiceDependencies): Toda
   return {
     async getOrCreateTodayPlan(userId, learningDate, now) {
       const stored = await dependencies.plans.getPlan(userId, learningDate);
-      if (stored) return toDTO(stored, dependencies, userId);
+      if (stored) return { ...await toDTO(stored, dependencies, userId), planCreated: false };
 
       const generated = await generateDaily30Plan(dependencies, userId, learningDate, now);
       const persisted = await dependencies.plans.createPlan(userId, generated);
-      return toDTO(persisted, dependencies, userId);
+      return { ...await toDTO(persisted, dependencies, userId), planCreated: persisted.id === generated.id };
     }
   };
 }

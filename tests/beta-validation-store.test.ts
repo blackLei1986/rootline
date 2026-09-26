@@ -36,6 +36,12 @@ describe("private Beta validation store", () => {
     expect(JSON.stringify(log)).not.toContain('"events"');
   });
 
+  it("rejects impossible learning dates rather than creating malformed daily aggregates", () => {
+    setBetaParticipation("account-a", true);
+    recordBetaEvent("account-a", "2026-99-99", {type: "plan-observed", targetCount: 30});
+    expect(readBetaLog("account-a").days).toHaveLength(0);
+  });
+
   it("bounds journal text and removes account identity and content identifiers from export", async () => {
     setBetaParticipation("account-secret", true);
     recordBetaEvent("account-secret", "2026-09-26", {
@@ -62,6 +68,20 @@ describe("private Beta validation store", () => {
     expect(await exportBetaLog("account-a").text()).not.toContain("not-a-beta-record");
   });
 
+  it("exports only allowlisted schema fields even if local storage has unknown properties", async () => {
+    setBetaParticipation("account-a", true);
+    recordBetaEvent("account-a", "2026-09-26", {type: "plan-observed", targetCount: 30});
+    const key = "rootline:beta-validation:v1:log:account-a";
+    const persisted = JSON.parse(localStorage.getItem(key) ?? "{}");
+    persisted.email = "private@example.invalid";
+    persisted.days[0].articleTitle = "private article title";
+    localStorage.setItem(key, JSON.stringify(persisted));
+
+    const exported = await exportBetaLog("account-a").text();
+    expect(exported).not.toContain("private@example.invalid");
+    expect(exported).not.toContain("private article title");
+  });
+
   it("deletes only the selected account's participation and validation data", () => {
     setBetaParticipation("account-a", true);
     setBetaParticipation("account-b", true);
@@ -77,9 +97,19 @@ describe("private Beta validation store", () => {
 
   it("applies each confirmed Today event revision only once", () => {
     setBetaParticipation("account-a", true);
-    recordTodayBetaTransition("account-a", "2026-09-26", 4, { type: "review-outcome", source: "root-core", correct: true });
-    recordTodayBetaTransition("account-a", "2026-09-26", 4, { type: "review-outcome", source: "root-core", correct: true });
+    recordTodayBetaTransition("account-a", "2026-09-26", 4, { type: "review-outcome", kind: "mini", source: "root-core", correct: true });
+    recordTodayBetaTransition("account-a", "2026-09-26", 4, { type: "review-outcome", kind: "mini", source: "root-core", correct: true });
+    recordTodayBetaTransition("account-a", "2026-09-26", 5, { type: "review-outcome", kind: "final", source: "root-core", correct: false });
+    recordTodayBetaTransition("account-a", "2026-09-26", 6, { type: "review-outcome", kind: "mini", source: "carryover", originSource: "root-core", correct: false });
 
-    expect(readBetaLog("account-a").days[0].reviewOutcomes["root-core"]).toEqual({ correct: 1, total: 1 });
+    expect(readBetaLog("account-a").days[0].reviewOutcomes["mini:root-core:root-core"]).toEqual({ correct: 1, total: 1 });
+    expect(readBetaLog("account-a").days[0].reviewOutcomes["final:root-core:root-core"]).toEqual({ correct: 0, total: 1 });
+    expect(readBetaLog("account-a").days[0].reviewOutcomes["mini:carryover:root-core"]).toEqual({ correct: 0, total: 1 });
+  });
+
+  it("keeps new-word totals separate from original source counts", () => {
+    setBetaParticipation("account-a", true);
+    recordBetaEvent("account-a", "2026-09-26", {type: "plan-observed", targetCount: 30, newWordCount: 20, sourceCounts: {carryover: 5, weak: 5, "root-core": 12, support: 13}});
+    expect(readBetaLog("account-a").days[0]).toMatchObject({newWordCount: 20, sourceCounts: {carryover: 5, weak: 5, "root-core": 12, support: 13}});
   });
 });

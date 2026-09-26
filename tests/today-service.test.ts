@@ -14,6 +14,7 @@ describe("Today service", () => {
     ]);
 
     expect(first.id).toBe(second.id);
+    expect(Number(first.planCreated) + Number(second.planCreated)).toBe(1);
     expect(first.article).toBeNull();
     expect(second.article).toBeNull();
     expect(first.dailyTargets).toHaveLength(30);
@@ -33,6 +34,8 @@ describe("Today service", () => {
     const reopened = await harness.service.getOrCreateTodayPlan("user-1", "2026-09-17", new Date("2026-09-17T09:00:00Z"));
 
     expect(reopened.id).toBe(first.id);
+    expect(first.planCreated).toBe(true);
+    expect(reopened.planCreated).toBe(false);
     expect(reopened.article).toBeNull();
     expect(reopened.dailyTargets?.map((target) => target.wordId)).toEqual(storedTargetIds);
   });

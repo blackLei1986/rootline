@@ -1,4 +1,4 @@
-import { getBetaParticipation, recordBetaEvent } from "@/lib/beta/validation-store";
+import { getBetaParticipation, isBetaLearningDate, recordBetaEvent } from "@/lib/beta/validation-store";
 
 export type BetaActivity = "block-a" | "block-b" | "block-c" | "mini-review-a" | "mini-review-b" | "mini-review-c" | "final-review";
 type TimerState = { learningDate: string; activity: BetaActivity; startedAt: number; paused: boolean };
@@ -11,7 +11,7 @@ function read(userId: string): TimerState | null {
     const raw = window.localStorage.getItem(key(userId));
     if (!raw) return null;
     const value = JSON.parse(raw) as TimerState;
-    return /^\d{4}-\d{2}-\d{2}$/.test(value.learningDate) && ACTIVITIES.has(value.activity) && Number.isFinite(value.startedAt) && typeof value.paused === "boolean" ? value : null;
+    return isBetaLearningDate(value.learningDate) && ACTIVITIES.has(value.activity) && Number.isFinite(value.startedAt) && typeof value.paused === "boolean" ? value : null;
   } catch { return null; }
 }
 function write(userId: string, state: TimerState | null): void {
@@ -25,12 +25,12 @@ function addElapsed(userId: string, state: TimerState, now: number): void {
 }
 
 export function startBetaActivity(userId: string, learningDate: string, activity: BetaActivity): void {
-  if (!getBetaParticipation(userId) || !ACTIVITIES.has(activity)) return;
+  if (!getBetaParticipation(userId) || !isBetaLearningDate(learningDate) || !ACTIVITIES.has(activity)) return;
   switchBetaActivity(userId, learningDate, activity);
 }
 
 export function switchBetaActivity(userId: string, learningDate: string, activity: BetaActivity): void {
-  if (!getBetaParticipation(userId) || !ACTIVITIES.has(activity)) return;
+  if (!getBetaParticipation(userId) || !isBetaLearningDate(learningDate) || !ACTIVITIES.has(activity)) return;
   const prior = read(userId);
   if (prior?.learningDate === learningDate && prior.activity === activity && !prior.paused) return;
   if (prior?.learningDate === learningDate) addElapsed(userId, prior, Date.now());

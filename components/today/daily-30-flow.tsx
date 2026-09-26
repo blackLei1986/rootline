@@ -35,8 +35,9 @@ export function Daily30Flow({ plan, betaUserId }: { plan: TodayPlanDTO; betaUser
       const origin = item.originSource ?? (item.source === "root-core" || item.source === "support" ? item.source : undefined);
       if (origin) sourceCounts[origin]++;
     }
-    recordBetaEvent(betaUserId, plan.date, { type: "plan-observed", targetCount: plan.dailyTargets.length, sourceCounts });
-  }, [betaUserId, plan.date, plan.dailyTargets]);
+    recordBetaEvent(betaUserId, plan.date, { type: "plan-observed", targetCount: plan.dailyTargets.length, newWordCount: plan.dailyTargets.filter((item) => item.source === "root-core" || item.source === "support").length, sourceCounts });
+    if (plan.planCreated) recordBetaEvent(betaUserId, plan.date, { type: "plan-created" });
+  }, [betaUserId, plan.date, plan.dailyTargets, plan.planCreated]);
   useEffect(() => { let active = true; (async () => {
     const pending = readPendingTodayCredit(plan.id);
     if (pending) {
@@ -106,7 +107,7 @@ export function Daily30Flow({ plan, betaUserId }: { plan: TodayPlanDTO; betaUser
   async function recognize(state: RecognitionState) { if (!target) return; const s = await emit({ type: "target_recognized", targetId: target.wordId, block, recognitionState: state }); if (!s) return; setView(state === "known" ? "association" : "learning-card"); }
   async function finish(activity: "learning-card" | "association" | "cloze" | "recall", correct = true) { if (!target) return; const s = await emit({ type: "target_activity_completed", targetId: target.wordId, block, activity, correct }); if (!s) return; setAnswer(""); const completeBlock = blockTargets.every((word) => s.completedTargetIds?.includes(word.wordId)); setView(completeBlock ? "mini" : nextView(targets, s)); }
   const needsReinforcement = (word: DailyTargetSnapshot) => { const progress = session?.targetProgress?.[word.wordId]; return progress?.recognitionState !== "known" || progress.outcomes.association === false || progress.outcomes.cloze === false || progress.outcomes.recall === false; };
-  async function answerReview(kind: "mini" | "final", reviewTarget: DailyTargetSnapshot, correct: boolean) { const s = await emit({ type: "review_answered", reviewKind: kind, targetId: reviewTarget.wordId, block: reviewTarget.block, correct }); if (!s) return; if (betaUserId) recordTodayBetaTransition(betaUserId, plan.date, s.eventRevision ?? 0, { type: "review-outcome", source: reviewTarget.source, correct }); setAnswer(""); }
+  async function answerReview(kind: "mini" | "final", reviewTarget: DailyTargetSnapshot, correct: boolean) { const s = await emit({ type: "review_answered", reviewKind: kind, targetId: reviewTarget.wordId, block: reviewTarget.block, correct }); if (!s) return; if (betaUserId) recordTodayBetaTransition(betaUserId, plan.date, s.eventRevision ?? 0, { type: "review-outcome", kind, source: reviewTarget.source, originSource: reviewTarget.originSource, correct }); setAnswer(""); }
   async function completeReview(kind: "mini" | "final") { if (kind === "mini") { const s = await emit({ type: "mini_review_completed", block }); if (s) setView(s.completedMiniReviewBlocks?.length === new Set(targets.map((word) => word.block)).size ? "final" : "recognition"); return; } const s = await emit({ type: "final_review_completed" }); if (s) { const completed = await emit({ type: "today_completed", stage: "summary" }); if (completed) { if (betaUserId) recordTodayBetaTransition(betaUserId, plan.date, completed.eventRevision ?? 0, { type: "session-completed" }); setView("complete"); } } }
   async function finishPersistedReview() { const completed = await emit({ type: "today_completed", stage: "summary" }); if (completed) { if (betaUserId) recordTodayBetaTransition(betaUserId, plan.date, completed.eventRevision ?? 0, { type: "session-completed" }); setView("complete"); } }
   if (saveUncertain) return <main className="page-shell max-w-3xl py-10"><ProductState title="保存状态尚不确定" description="为避免覆盖今日进度，已暂停操作。请重新读取今日进度。" actionHref="/today" actionLabel="重新读取今日进度" variant="error" /></main>;
