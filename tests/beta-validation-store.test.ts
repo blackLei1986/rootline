@@ -5,6 +5,7 @@ import {
   getBetaParticipation,
   readBetaLog,
   recordBetaEvent,
+  recordTodayBetaTransition,
   setBetaParticipation,
 } from "@/lib/beta/validation-store";
 
@@ -72,5 +73,13 @@ describe("private Beta validation store", () => {
     expect(readBetaLog("account-a").days).toHaveLength(0);
     expect(getBetaParticipation("account-b")).toBe(true);
     expect(readBetaLog("account-b").days).toHaveLength(1);
+  });
+
+  it("applies each confirmed Today event revision only once", () => {
+    setBetaParticipation("account-a", true);
+    recordTodayBetaTransition("account-a", "2026-09-26", 4, { type: "review-outcome", source: "root-core", correct: true });
+    recordTodayBetaTransition("account-a", "2026-09-26", 4, { type: "review-outcome", source: "root-core", correct: true });
+
+    expect(readBetaLog("account-a").days[0].reviewOutcomes["root-core"]).toEqual({ correct: 1, total: 1 });
   });
 });

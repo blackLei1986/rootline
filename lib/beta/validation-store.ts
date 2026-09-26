@@ -21,11 +21,12 @@ export type BetaDay = {
   conflictRecoveries: number;
   routeTimings: Record<string, number[]>;
   journal?: BetaJournal;
+  lastEventRevision?: number;
 };
 
 export type BetaValidationLog = { version: 1; days: BetaDay[] };
 
-type BetaEvent =
+export type BetaEvent =
   | { type: "plan-observed"; targetCount: number; sourceCounts?: Record<string, number> }
   | { type: "session-started"; at?: string }
   | { type: "session-completed"; at?: string }
@@ -38,6 +39,14 @@ type BetaEvent =
   | { type: "conflict-recovery" }
   | { type: "route-timing"; route: "today" | "reading" | "reading-article" | "progress"; milliseconds: number }
   | { type: "journal"; ratings: BetaJournal["ratings"]; continueTomorrow: boolean; note: string };
+
+export type TodayBetaTransition =
+  | { type: "session-started"; at?: string }
+  | { type: "session-completed"; at?: string }
+  | { type: "review-outcome"; source: string; correct: boolean }
+  | { type: "recoverable-error" }
+  | { type: "conflict-recovery" };
+
 
 const PREFIX = "rootline:beta-validation:v1:";
 const MAX_DURATION = 24 * 60 * 60 * 1000;
@@ -164,6 +173,19 @@ export function recordBetaEvent(userId: string, learningDate: string, event: Bet
     storage.setItem(storageKey(userId, "log"), JSON.stringify(log));
   } catch { /* Quota/private-mode errors are non-blocking. */ }
 }
+
+export function recordTodayBetaTransition(userId: string, learningDate: string, eventRevision: number, event: TodayBetaTransition): void {
+  if (!Number.isInteger(eventRevision) || eventRevision < 0 || !getBetaParticipation(userId)) return;
+  const prior = readBetaLog(userId).days.find((item) => item.learningDate === learningDate);
+  if (prior?.lastEventRevision !== undefined && eventRevision <= prior.lastEventRevision) return;
+  recordBetaEvent(userId, learningDate, event);
+  const next = readBetaLog(userId);
+  const day = next.days.find((item) => item.learningDate === learningDate);
+  if (!day) return;
+  day.lastEventRevision = eventRevision;
+  try { safeStorage()?.setItem(storageKey(userId, "log"), JSON.stringify(next)); } catch { /* Optional measurement. */ }
+}
+
 
 export function exportBetaLog(userId: string): Blob {
   return new Blob([JSON.stringify(readBetaLog(userId), null, 2)], { type: "application/json" });

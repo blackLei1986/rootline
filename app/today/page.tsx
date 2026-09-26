@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 import { TodayLearningFlow } from "@/components/today-learning-flow";
+import { getOptionalViewer } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "今日学习", description: "由系统编排的每日词汇学习主流程。" };
-export default function TodayPage() { return <TodayLearningFlow />; }
+export default async function TodayPage() {
+  const viewer = await getOptionalViewer();
+  return <TodayLearningFlow betaUserId={viewer?.emailVerified ? viewer.userId : undefined} />;
+}
