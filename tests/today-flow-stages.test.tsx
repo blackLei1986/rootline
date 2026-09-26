@@ -39,6 +39,7 @@ describe("Today Reading flow", () => {
 
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ status: "complete", eventRevision: 2, currentBlock: 1, completedTargetIds: ["target-1"], targetProgress: { "target-1": { outcomes: {}, recognitionState: "known" } } }) })));
     render(<Daily30Flow plan={daily30Plan()} />);
+    await screen.findByText("今日完成");
     expect(await screen.findByRole("link", { name: "今日阅读" })).toHaveAttribute("href", "/reading");
   });
 
