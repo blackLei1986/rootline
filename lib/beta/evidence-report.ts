@@ -12,14 +12,17 @@ export type PersistedBetaEvent = {
 export type ServerBetaDay = {
   learningDate: string;
   planObserved: boolean;
+  firstPlanRecordedAt?: string;
   plansCreated: number;
   targetCount: number;
   newWordCount: number;
   sourceCounts: Record<string, number>;
   startedAt?: string;
+  firstStartRecordedAt?: string;
   completedAt?: string;
   todayCompletedFromEvents: boolean;
   todayCompletionVerified: boolean;
+  betaLearningDayEligible: boolean;
   authoritativeCompletedAt?: string;
   totalTodayMilliseconds: number;
   activeMilliseconds: number;
@@ -41,7 +44,7 @@ export type ServerBetaDay = {
 function newDay(learningDate: string): ServerBetaDay {
   return {
     learningDate, planObserved: false, plansCreated: 0, targetCount: 0, newWordCount: 0,
-    sourceCounts: {}, todayCompletedFromEvents: false, todayCompletionVerified: false, totalTodayMilliseconds: 0,
+    sourceCounts: {}, todayCompletedFromEvents: false, todayCompletionVerified: false, betaLearningDayEligible: false, totalTodayMilliseconds: 0,
     activeMilliseconds: 0, activityMilliseconds: {}, reviewOutcomes: {}, todayOpens: 0,
     readingOpens: 0, readingCompletions: 0, progressOpens: 0, recoverableErrors: 0,
     conflictRecoveries: 0, routeTimings: {}, deploymentCommits: [], eventCount: 0, invalidEventCount: 0,
@@ -66,6 +69,7 @@ export function buildBetaEvidenceReport(accountId: string, rows: readonly Persis
     switch (event.type) {
       case "plan-observed":
         day.planObserved = true;
+        if (!day.firstPlanRecordedAt || row.recorded_at < day.firstPlanRecordedAt) day.firstPlanRecordedAt = row.recorded_at;
         day.targetCount = event.targetCount;
         day.newWordCount = event.newWordCount ?? 0;
         day.sourceCounts = { ...(event.sourceCounts ?? {}) };
@@ -74,6 +78,7 @@ export function buildBetaEvidenceReport(accountId: string, rows: readonly Persis
       case "session-started": {
         const at = event.at ?? row.recorded_at;
         if (!day.startedAt || at < day.startedAt) day.startedAt = at;
+        if (!day.firstStartRecordedAt || row.recorded_at < day.firstStartRecordedAt) day.firstStartRecordedAt = row.recorded_at;
         break;
       }
       case "session-completed": {
@@ -118,6 +123,11 @@ export function buildBetaEvidenceReport(accountId: string, rows: readonly Persis
     if (confirmed) {
       day.todayCompletionVerified = true;
       day.authoritativeCompletedAt = confirmed.completedAt;
+      const planAt = Date.parse(day.firstPlanRecordedAt ?? "");
+      const startAt = Date.parse(day.firstStartRecordedAt ?? "");
+      const completeAt = Date.parse(confirmed.completedAt);
+      day.betaLearningDayEligible = Number.isFinite(planAt) && Number.isFinite(startAt) && Number.isFinite(completeAt)
+        && planAt <= startAt && startAt < completeAt;
     }
     if (day.startedAt && day.completedAt) day.totalTodayMilliseconds = Math.max(0, Date.parse(day.completedAt) - Date.parse(day.startedAt));
     day.deploymentCommits.sort();

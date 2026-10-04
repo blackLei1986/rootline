@@ -20,7 +20,23 @@ describe("persisted Beta daily evidence report", () => {
     const unverified = buildBetaEvidenceReport("account-a", events);
     expect(unverified.days[0]).toMatchObject({ todayCompletedFromEvents: true, todayCompletionVerified: false, completedAt: "2026-10-04T01:30:00.000Z", totalTodayMilliseconds: 1_800_000 });
     const verified = buildBetaEvidenceReport("account-a", events, [{ learningDate: "2026-10-04", completedAt: "2026-10-04T01:29:00.000Z" }]);
-    expect(verified.days[0]).toMatchObject({ todayCompletionVerified: true, authoritativeCompletedAt: "2026-10-04T01:29:00.000Z" });
+    expect(verified.days[0]).toMatchObject({ todayCompletionVerified: true, betaLearningDayEligible: false, authoritativeCompletedAt: "2026-10-04T01:29:00.000Z" });
+  });
+
+  it("counts a Beta learning day only when plan observation and start reached the server before authoritative completion", () => {
+    const completedAt = "2026-10-04T01:30:00.000Z";
+    const before = buildBetaEvidenceReport("account-a", [
+      row("plan", "2026-10-04", { type: "plan-observed", targetCount: 30 }, "2026-10-04T01:00:00.000Z"),
+      row("start", "2026-10-04", { type: "session-started" }, "2026-10-04T01:01:00.000Z"),
+      row("end", "2026-10-04", { type: "session-completed" }, "2026-10-04T01:31:00.000Z"),
+    ], [{ learningDate: "2026-10-04", completedAt }]);
+    expect(before.days[0]).toMatchObject({ todayCompletionVerified: true, betaLearningDayEligible: true });
+    const after = buildBetaEvidenceReport("account-a", [
+      row("plan", "2026-10-04", { type: "plan-observed", targetCount: 30 }, "2026-10-04T02:00:00.000Z"),
+      row("start", "2026-10-04", { type: "session-started" }, "2026-10-04T02:01:00.000Z"),
+      row("end", "2026-10-04", { type: "session-completed" }, "2026-10-04T02:02:00.000Z"),
+    ], [{ learningDate: "2026-10-04", completedAt }]);
+    expect(after.days[0]).toMatchObject({ todayCompletionVerified: true, betaLearningDayEligible: false });
   });
   it("groups two learning dates without losing prior-day duration, review, Journal or commit", () => {
     const report = buildBetaEvidenceReport("account-a", [
