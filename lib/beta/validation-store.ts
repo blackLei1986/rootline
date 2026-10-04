@@ -28,7 +28,7 @@ export type BetaDay = {
   appliedEventRevisions: number[];
 };
 
-export type BetaValidationLog = { version: 1; days: BetaDay[]; readingCompletionTokens?: string[] };
+export type BetaValidationLog = { version: 1; days: BetaDay[]; readingObservedTokens?: string[]; readingCompletionTokens?: string[] };
 
 export type BetaEvent =
   | { type: "plan-observed"; targetCount: number; newWordCount?: number; sourceCounts?: Record<string, number> }
@@ -39,6 +39,7 @@ export type BetaEvent =
   | { type: "review-outcome"; kind: "mini" | "final"; source: string; originSource?: "root-core" | "support"; correct: boolean }
   | { type: "reading-open" }
   | { type: "today-open" }
+  | { type: "reading-observed"; sessionId: string }
   | { type: "reading-completed"; sessionId: string }
   | { type: "progress-open" }
   | { type: "recoverable-error" }
@@ -138,10 +139,13 @@ function normalizeLog(value: unknown): BetaValidationLog | null {
     } else if (day.lastEventRevision !== undefined) day.appliedEventRevisions = [day.lastEventRevision];
     days.push(day);
   }
+  const readingObservedTokens = Array.isArray(candidate.readingObservedTokens)
+    ? [...new Set(candidate.readingObservedTokens.filter((token): token is string => typeof token === "string" && /^[0-9a-f]{16}$/.test(token)))].slice(-1_000)
+    : undefined;
   const readingCompletionTokens = Array.isArray(candidate.readingCompletionTokens)
     ? [...new Set(candidate.readingCompletionTokens.filter((token): token is string => typeof token === "string" && /^[0-9a-f]{16}$/.test(token)))].slice(-1_000)
     : undefined;
-  return readingCompletionTokens ? {version: 1, days, readingCompletionTokens} : {version: 1, days};
+  return {version: 1, days, ...(readingObservedTokens ? {readingObservedTokens} : {}), ...(readingCompletionTokens ? {readingCompletionTokens} : {})};
 }
 
 function readingSessionToken(sessionId: string): string {
@@ -234,8 +238,14 @@ export function recordBetaEvent(userId: string, learningDate: string, event: Bet
   try {
     if (hasMalformedBetaLog(userId)) return;
     const log = readBetaLog(userId);
-    const readingToken = event.type === "reading-completed" && event.sessionId ? readingSessionToken(event.sessionId) : null;
-    if (event.type === "reading-completed" && (!readingToken || log.readingCompletionTokens?.includes(readingToken))) return;
+    const readingToken = (event.type === "reading-observed" || event.type === "reading-completed") && event.sessionId ? readingSessionToken(event.sessionId) : null;
+    if (event.type === "reading-observed") {
+      if (!readingToken || log.readingObservedTokens?.includes(readingToken)) return;
+      log.readingObservedTokens = [...(log.readingObservedTokens ?? []), readingToken].slice(-1_000);
+      storage.setItem(storageKey(userId, "log"), JSON.stringify(log));
+      return;
+    }
+    if (event.type === "reading-completed" && (!readingToken || !log.readingObservedTokens?.includes(readingToken) || log.readingCompletionTokens?.includes(readingToken))) return;
     const day = log.days.find((item) => item.learningDate === learningDate) ?? newDay(learningDate);
     if (!log.days.includes(day)) log.days.push(day);
     switch (event.type) {

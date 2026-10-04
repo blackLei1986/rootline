@@ -140,6 +140,7 @@ describe("private Beta validation store", () => {
 
   it("counts a Reading session once across dates without exporting its deduplication token", async () => {
     setBetaParticipation("account-a", true);
+    recordBetaEvent("account-a", "2026-09-26", {type: "reading-observed", sessionId: "private-session-1"});
     recordBetaEvent("account-a", "2026-09-26", {type: "reading-completed", sessionId: "private-session-1"});
     recordBetaEvent("account-a", "2026-09-27", {type: "reading-completed", sessionId: "private-session-1"});
     expect(readBetaLog("account-a").days.reduce((sum, day) => sum + day.readingCompletions, 0)).toBe(1);
@@ -147,5 +148,6 @@ describe("private Beta validation store", () => {
     const exported = await exportBetaLog("account-a").text();
     expect(exported).not.toContain("private-session-1");
     expect(exported).not.toContain("readingCompletionTokens");
+    expect(exported).not.toContain("readingObservedTokens");
   });
 });

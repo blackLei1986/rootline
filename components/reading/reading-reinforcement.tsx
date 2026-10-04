@@ -18,7 +18,11 @@ export function ReadingReinforcement({initialSession, betaUserId}: {initialSessi
   const answerRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!betaUserId || session.status !== "complete") return;
+    if (!betaUserId) return;
+    if (session.status !== "complete") {
+      recordBetaEvent(betaUserId, session.learningDate, {type: "reading-observed", sessionId: session.id});
+      return;
+    }
     const latestAnswer = session.outcomes.map((item) => Date.parse(item.answeredAt)).filter(Number.isFinite).sort((a, b) => b - a)[0];
     const today = latestAnswer === undefined ? new Date() : new Date(latestAnswer);
     const learningDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
