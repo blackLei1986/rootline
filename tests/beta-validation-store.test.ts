@@ -48,24 +48,27 @@ describe("private Beta validation store", () => {
       type: "journal",
       ratings: { difficulty: 4, fatigue: 3, rootUsefulness: 5, reviewUsefulness: 4 },
       continueTomorrow: true,
-      note: `https://private.invalid/story article-secret word-secret ${"x".repeat(600)}`,
+      note: `https://private.invalid/story article-secret word-secret 550e8400-e29b-41d4-a716-446655440000 ${"x".repeat(600)}`,
     });
 
     const exported = await exportBetaLog("account-secret").text();
     expect(exported).not.toContain("account-secret");
     expect(exported).not.toContain("word-secret");
     expect(exported).not.toContain("article-secret");
+    expect(exported).not.toContain("550e8400-e29b-41d4-a716-446655440000");
     expect(exported).not.toContain("https://private.invalid");
     const note = JSON.parse(exported).days[0].journal.note as string;
     expect(note.length).toBeLessThanOrEqual(500);
   });
 
-  it("ignores malformed persisted schemas rather than exporting arbitrary local data", async () => {
+  it("preserves malformed persisted data instead of silently overwriting it", async () => {
     setBetaParticipation("account-a", true);
     localStorage.setItem("rootline:beta-validation:v1:log:account-a", JSON.stringify({ version: 9, days: [{ secret: "not-a-beta-record" }] }));
 
     expect(readBetaLog("account-a")).toEqual({ version: 1, days: [] });
     expect(await exportBetaLog("account-a").text()).not.toContain("not-a-beta-record");
+    recordBetaEvent("account-a", "2026-09-26", {type: "plan-observed", targetCount: 30});
+    expect(localStorage.getItem("rootline:beta-validation:v1:log:account-a")).toContain("not-a-beta-record");
   });
 
   it("exports only allowlisted schema fields even if local storage has unknown properties", async () => {
@@ -93,6 +96,18 @@ describe("private Beta validation store", () => {
     expect(readBetaLog("account-a").days).toHaveLength(0);
     expect(getBetaParticipation("account-b")).toBe(true);
     expect(readBetaLog("account-b").days).toHaveLength(1);
+  });
+
+  it("removes a deleted account's in-flight Beta timer", async () => {
+    const {startBetaActivity} = await import("@/lib/beta/validation-timer");
+    setBetaParticipation("account-a", true);
+    startBetaActivity("account-a", "2026-09-26", "block-a");
+    expect(localStorage.getItem("rootline:beta-validation:timer:v1:account-a")).not.toBeNull();
+    deleteBetaLog("account-a");
+    setBetaParticipation("account-a", true);
+    const {pauseBetaActivity} = await import("@/lib/beta/validation-timer");
+    pauseBetaActivity("account-a", "2026-09-26");
+    expect(readBetaLog("account-a").days).toHaveLength(0);
   });
 
   it("applies each confirmed Today event revision only once", () => {

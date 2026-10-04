@@ -47,4 +47,15 @@ describe("foreground Beta activity timer", () => {
 
     expect(readBetaLog("user-a").days[0].activeMilliseconds).toBe(2_000);
   });
+
+  it("does not count time across a terminated browser document", async () => {
+    startBetaActivity("user-a", "2026-09-26", "block-a");
+    vi.advanceTimersByTime(60_000);
+    vi.resetModules();
+    const reloaded = await import("@/lib/beta/validation-timer");
+    reloaded.startBetaActivity("user-a", "2026-09-26", "block-a");
+    vi.advanceTimersByTime(1_000);
+    reloaded.pauseBetaActivity("user-a", "2026-09-26");
+    expect(readBetaLog("user-a").days[0].activeMilliseconds).toBe(1_000);
+  });
 });

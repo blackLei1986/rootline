@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BetaJournal } from "@/components/today/beta-journal";
 import { BetaParticipantControls } from "@/components/beta/beta-participant-controls";
-import { readBetaLog, setBetaParticipation } from "@/lib/beta/validation-store";
+import { readBetaLog, recordBetaEvent, setBetaParticipation } from "@/lib/beta/validation-store";
 
 describe("optional local Beta feedback", () => {
   beforeEach(() => localStorage.clear());
@@ -49,6 +49,19 @@ describe("optional local Beta feedback", () => {
     expect(screen.getByRole("checkbox", {name: /加入 7 天 Beta 验证/})).not.toBeChecked();
   });
 
+  it("switches journal state with the account instead of retaining another account's answers", () => {
+    setBetaParticipation("account-a", true);
+    setBetaParticipation("account-b", true);
+    const ratings = {difficulty: 2, fatigue: 2, rootUsefulness: 2, reviewUsefulness: 2};
+    recordBetaEvent("account-a", "2026-09-26", {type: "journal", ratings, continueTomorrow: false, note: "Account A private note"});
+    recordBetaEvent("account-b", "2026-09-26", {type: "journal", ratings, continueTomorrow: true, note: "Account B private note"});
+    const view = render(<BetaJournal userId="account-a" learningDate="2026-09-26" />);
+    expect(screen.getByRole("textbox", {name: /最不舒服/})).toHaveValue("Account A private note");
+
+    view.rerender(<BetaJournal userId="account-b" learningDate="2026-09-26" />);
+    expect(screen.getByRole("textbox", {name: /最不舒服/})).toHaveValue("Account B private note");
+  });
+
   it("exports and deletes only the selected account record", () => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     const createObjectURL = vi.fn(() => "blob:beta-export");
@@ -59,5 +72,17 @@ describe("optional local Beta feedback", () => {
     expect(createObjectURL).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", {name: "删除验证记录"}));
     expect(localStorage.getItem("rootline:beta-validation:v1:participation:account-a")).toBeNull();
+  });
+
+  it("warns instead of exporting an empty report for a malformed local log", () => {
+    setBetaParticipation("account-a", true);
+    localStorage.setItem("rootline:beta-validation:v1:log:account-a", "not-json");
+    const createObjectURL = vi.fn();
+    vi.stubGlobal("URL", {...URL, createObjectURL});
+    render(<BetaParticipantControls userId="account-a" />);
+    expect(screen.getByRole("alert")).toHaveTextContent("无法读取");
+    fireEvent.click(screen.getByRole("button", {name: "导出验证记录"}));
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(localStorage.getItem("rootline:beta-validation:v1:log:account-a")).toBe("not-json");
   });
 });

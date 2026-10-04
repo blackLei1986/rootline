@@ -54,6 +54,7 @@ export type TodayBetaTransition =
 
 
 const PREFIX = "rootline:beta-validation:v1:";
+const TIMER_PREFIX = "rootline:beta-validation:timer:v1:";
 const PARTICIPATION_CHANGED = "rootline:beta-validation:participation-changed";
 const MAX_DURATION = 24 * 60 * 60 * 1000;
 const SOURCE_KEYS = new Set(["carryover", "weak", "root-core", "support"]);
@@ -180,6 +181,13 @@ export function readBetaLog(userId: string): BetaValidationLog {
   } catch { return emptyLog(); }
 }
 
+export function hasMalformedBetaLog(userId: string): boolean {
+  try {
+    const raw = safeStorage()?.getItem(storageKey(userId, "log"));
+    return raw !== null && raw !== undefined && normalizeLog(JSON.parse(raw)) === null;
+  } catch { return true; }
+}
+
 function newDay(learningDate: string): BetaDay {
   return { learningDate, planObserved: false, plansCreated: 0, targetCount: 0, newWordCount: 0, activeMilliseconds: 0, activityMilliseconds: {}, sourceCounts: {}, reviewOutcomes: {}, todayOpens: 0, readingOpens: 0, readingCompletions: 0, progressOpens: 0, recoverableErrors: 0, conflictRecoveries: 0, routeTimings: {} };
 }
@@ -197,6 +205,7 @@ function sanitizeJournalNote(value: unknown): string {
   return value
     .replace(/https?:\/\/\S+|www\.\S+/gi, "[link removed]")
     .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi, "[email removed]")
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, "[identifier removed]")
     .replace(/\b(?:article|word|vocab|target|root)[-_:#][a-z0-9_-]{4,}\b/gi, "[identifier removed]")
     .slice(0, 500);
 }
@@ -206,6 +215,7 @@ export function recordBetaEvent(userId: string, learningDate: string, event: Bet
   const storage = safeStorage();
   if (!storage) return;
   try {
+    if (hasMalformedBetaLog(userId)) return;
     const log = readBetaLog(userId);
     const day = log.days.find((item) => item.learningDate === learningDate) ?? newDay(learningDate);
     if (!log.days.includes(day)) log.days.push(day);
@@ -264,6 +274,7 @@ export function recordBetaEvent(userId: string, learningDate: string, event: Bet
 
 export function recordTodayBetaTransition(userId: string, learningDate: string, eventRevision: number, event: TodayBetaTransition): void {
   if (!Number.isInteger(eventRevision) || eventRevision < 0 || !getBetaParticipation(userId)) return;
+  if (hasMalformedBetaLog(userId)) return;
   const prior = readBetaLog(userId).days.find((item) => item.learningDate === learningDate);
   if (prior?.lastEventRevision !== undefined && eventRevision <= prior.lastEventRevision) return;
   recordBetaEvent(userId, learningDate, event);
@@ -284,6 +295,7 @@ export function deleteBetaLog(userId: string): void {
     const storage = safeStorage();
     storage?.removeItem(storageKey(userId, "log"));
     storage?.removeItem(storageKey(userId, "participation"));
+    storage?.removeItem(`${TIMER_PREFIX}${encodeURIComponent(userId)}`);
     notifyParticipationChanged(userId);
   } catch { /* Best effort; UI can surface unavailable storage. */ }
 }

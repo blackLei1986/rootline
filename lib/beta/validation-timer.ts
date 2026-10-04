@@ -1,8 +1,9 @@
 import { getBetaParticipation, isBetaLearningDate, recordBetaEvent } from "@/lib/beta/validation-store";
 
 export type BetaActivity = "block-a" | "block-b" | "block-c" | "mini-review-a" | "mini-review-b" | "mini-review-c" | "final-review";
-type TimerState = { learningDate: string; activity: BetaActivity; startedAt: number; paused: boolean };
+type TimerState = { learningDate: string; activity: BetaActivity; startedAt: number; paused: boolean; documentToken: string };
 const TIMER_PREFIX = "rootline:beta-validation:timer:v1:";
+const DOCUMENT_TOKEN = crypto.randomUUID();
 const ACTIVITIES = new Set<BetaActivity>(["block-a", "block-b", "block-c", "mini-review-a", "mini-review-b", "mini-review-c", "final-review"]);
 
 function key(userId: string): string { return `${TIMER_PREFIX}${encodeURIComponent(userId)}`; }
@@ -11,7 +12,7 @@ function read(userId: string): TimerState | null {
     const raw = window.localStorage.getItem(key(userId));
     if (!raw) return null;
     const value = JSON.parse(raw) as TimerState;
-    return isBetaLearningDate(value.learningDate) && ACTIVITIES.has(value.activity) && Number.isFinite(value.startedAt) && typeof value.paused === "boolean" ? value : null;
+    return value.documentToken === DOCUMENT_TOKEN && isBetaLearningDate(value.learningDate) && ACTIVITIES.has(value.activity) && Number.isFinite(value.startedAt) && typeof value.paused === "boolean" ? value : null;
   } catch { return null; }
 }
 function write(userId: string, state: TimerState | null): void {
@@ -35,7 +36,7 @@ export function switchBetaActivity(userId: string, learningDate: string, activit
   if (prior?.learningDate === learningDate && prior.activity === activity && !prior.paused) return;
   if (prior?.learningDate === learningDate) addElapsed(userId, prior, Date.now());
   recordBetaEvent(userId, learningDate, { type: "session-started" });
-  write(userId, { learningDate, activity, startedAt: Date.now(), paused: false });
+  write(userId, { learningDate, activity, startedAt: Date.now(), paused: false, documentToken: DOCUMENT_TOKEN });
 }
 
 export function pauseBetaActivity(userId: string, learningDate: string): void {

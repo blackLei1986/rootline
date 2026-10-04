@@ -4,6 +4,7 @@ import {Daily30Flow} from "@/components/today/daily-30-flow";
 import type {TodayPlanDTO, TodaySessionDTO} from "@/types/today";
 import {getWordProgress, resetProgress} from "@/lib/storage";
 import {creditAcceptedTodayEvent, readPendingTodayCredit, savePendingTodayCredit} from "@/lib/today/learning-credit";
+import {readBetaLog, setBetaParticipation} from "@/lib/beta/validation-store";
 
 const plan = {id: "plan-1", date: "2026-09-25", version: 1, status: "not-started", estimatedMinutes: 20,
   warmupReviewIds: [], warmupReviewEntries: [], rapidScanEntries: [], focusedLearningTarget: 0,
@@ -20,9 +21,27 @@ function session(status: TodaySessionDTO["status"], revision: number): TodaySess
     finalReviewComplete: status === "complete", reviewAccuracy: {correct: 0, total: 0}, reviewAnswers: {}, eventRevision: revision};
 }
 
-afterEach(() => {cleanup(); vi.unstubAllGlobals(); window.localStorage.clear(); resetProgress();});
+afterEach(() => {cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); window.localStorage.clear(); resetProgress();});
 
 describe("Today ambiguous save recovery", () => {
+  it("excludes a pending save from active learning duration", async () => {
+    setBetaParticipation("beta-account", true);
+    let now = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => init?.method === "POST"
+      ? new Promise(() => {})
+      : {ok: true, json: async () => session("active", 1)}));
+    render(<Daily30Flow plan={plan} betaUserId="beta-account" />);
+    await waitFor(() => expect(screen.getByRole("button", {name: "继续今日学习"})).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", {name: "继续今日学习"}));
+    expect(screen.getByRole("button", {name: "认识"})).toBeVisible();
+    now = 1_000;
+    fireEvent.click(screen.getByRole("button", {name: "认识"}));
+    await waitFor(() => expect(screen.getByRole("button", {name: "认识"})).toBeDisabled());
+    expect(readBetaLog("beta-account").days[0].activeMilliseconds).toBe(1_000);
+    now = 10_000;
+    expect(readBetaLog("beta-account").days[0].activeMilliseconds).toBe(1_000);
+  });
   it("refreshes after a lost POST response and never replays the start operation", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce({ok: true, json: async () => session("not-started", 0)})
       .mockRejectedValueOnce(new Error("network timeout"))
@@ -37,14 +56,16 @@ describe("Today ambiguous save recovery", () => {
   });
 
   it("handles a second-tab 409 by showing the authoritative completed state", async () => {
+    setBetaParticipation("beta-account", true);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ok: true, json: async () => session("not-started", 0)})
       .mockResolvedValueOnce({ok: false, status: 409})
       .mockResolvedValueOnce({ok: true, json: async () => session("complete", 3)}));
-    render(<Daily30Flow plan={plan} />);
+    render(<Daily30Flow plan={plan} betaUserId="beta-account" />);
     await waitFor(() => expect(screen.getByRole("button", {name: "开始今日学习"})).toBeEnabled());
     fireEvent.click(screen.getByRole("button", {name: "开始今日学习"}));
     expect(await screen.findByRole("heading", {name: "1 / 1"})).toBeVisible();
     expect(screen.queryByRole("button", {name: "开始今日学习"})).not.toBeInTheDocument();
+    expect(readBetaLog("beta-account").days[0].completedAt).toBeTruthy();
   });
 
   it("blocks another write when both POST outcome and refresh are unknown", async () => {
@@ -60,6 +81,7 @@ describe("Today ambiguous save recovery", () => {
   });
 
   it("credits an accepted wrong review exactly once after its response is lost", async () => {
+    setBetaParticipation("beta-account", true);
     resetProgress();
     const before = {...session("active", 1), completedTargetIds: ["inspect"],
       targetProgress: {inspect: {targetId: "inspect", block: 1, status: "complete", currentActivity: null,
@@ -72,28 +94,33 @@ describe("Today ambiguous save recovery", () => {
       return {ok: true, json: async () => fetchMock.mock.calls.some(([, options]) => options?.method === "POST") ? after : before};
     });
     vi.stubGlobal("fetch", fetchMock);
-    const view = render(<Daily30Flow plan={plan} />);
+    const view = render(<Daily30Flow plan={plan} betaUserId="beta-account" />);
     await waitFor(() => expect(screen.getByRole("button", {name: "继续今日学习"})).toBeEnabled());
     fireEvent.click(screen.getByRole("button", {name: "继续今日学习"}));
     fireEvent.click(screen.getByRole("button", {name: "没想起来"}));
     await waitFor(() => expect(getWordProgress("inspect").wrongCount).toBe(1));
     expect(readPendingTodayCredit(plan.id)).toBeNull();
+    expect(readBetaLog("beta-account").days[0].reviewOutcomes["mini:support:support"]).toEqual({correct: 0, total: 1});
     view.unmount();
-    render(<Daily30Flow plan={plan} />);
+    render(<Daily30Flow plan={plan} betaUserId="beta-account" />);
     await waitFor(() => expect(screen.getByRole("button", {name: "继续今日学习"})).toBeEnabled());
     expect(getWordProgress("inspect").wrongCount).toBe(1);
+    expect(readBetaLog("beta-account").days[0].reviewOutcomes["mini:support:support"]).toEqual({correct: 0, total: 1});
   });
 
   it("reconciles a durable pending accepted review after a page reload", async () => {
     resetProgress();
+    setBetaParticipation("beta-account", true);
     savePendingTodayCredit({operationId: "accepted-op", planId: plan.id, occurredAt: "2026-09-25T12:00:00Z",
       type: "review_answered", stage: "learn", reviewKind: "mini", targetId: "inspect", block: 1, correct: false});
     vi.stubGlobal("fetch", vi.fn(async (url: string) => url.includes("operationId=")
       ? {ok: true, json: async () => ({applied: true})}
-      : {ok: true, json: async () => session("active", 2)}));
-    render(<Daily30Flow plan={plan} />);
+      : {ok: true, json: async () => ({...session("complete", 2), reviewAnswers: {"mini:inspect": false}})}));
+    render(<Daily30Flow plan={plan} betaUserId="beta-account" />);
     await waitFor(() => expect(getWordProgress("inspect").wrongCount).toBe(1));
     expect(readPendingTodayCredit(plan.id)).toBeNull();
+    expect(readBetaLog("beta-account").days[0].reviewOutcomes["mini:support:support"]).toEqual({correct: 0, total: 1});
+    expect(readBetaLog("beta-account").days[0].completedAt).toBeTruthy();
   });
 
   it("replays the same operation ID when the first status read races an in-flight POST", async () => {
