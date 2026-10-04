@@ -1,3 +1,5 @@
+import { clearBetaEvidenceOutbox, enqueueBetaEvidence, flushBetaEvidence } from "@/lib/beta/evidence-outbox";
+
 export type BetaJournal = {
   ratings: { difficulty: number; fatigue: number; rootUsefulness: number; reviewUsefulness: number };
   continueTomorrow: boolean;
@@ -231,12 +233,18 @@ function sanitizeJournalNote(value: unknown): string {
     .slice(0, 500);
 }
 
-export function recordBetaEvent(userId: string, learningDate: string, event: BetaEvent): void {
+function queueServerEvidence(userId: string, learningDate: string, event: BetaEvent, eventKey?: string): void {
+  if (process.env.NEXT_PUBLIC_BETA_EVIDENCE_ENABLED !== "1") return;
+  if (enqueueBetaEvidence(userId, learningDate, event, eventKey)) void flushBetaEvidence(userId);
+}
+
+export function recordBetaEvent(userId: string, learningDate: string, event: BetaEvent, eventKey?: string): void {
   if (!getBetaParticipation(userId) || !isBetaLearningDate(learningDate)) return;
   const storage = safeStorage();
   if (!storage) return;
   try {
     if (hasMalformedBetaLog(userId)) return;
+    queueServerEvidence(userId, learningDate, event, eventKey);
     const log = readBetaLog(userId);
     const readingToken = (event.type === "reading-observed" || event.type === "reading-completed") && event.sessionId ? readingSessionToken(event.sessionId) : null;
     if (event.type === "reading-observed") {
@@ -309,9 +317,11 @@ export function recordBetaEvent(userId: string, learningDate: string, event: Bet
 export function recordTodayBetaTransition(userId: string, learningDate: string, eventRevision: number, event: TodayBetaTransition): void {
   if (!Number.isInteger(eventRevision) || eventRevision < 0 || !getBetaParticipation(userId)) return;
   if (hasMalformedBetaLog(userId)) return;
+  const eventKey = `today:${learningDate}:${eventRevision}`;
+  queueServerEvidence(userId, learningDate, event, eventKey);
   const prior = readBetaLog(userId).days.find((item) => item.learningDate === learningDate);
   if (prior?.appliedEventRevisions.includes(eventRevision)) return;
-  recordBetaEvent(userId, learningDate, event);
+  recordBetaEvent(userId, learningDate, event, eventKey);
   const next = readBetaLog(userId);
   const day = next.days.find((item) => item.learningDate === learningDate);
   if (!day) return;
@@ -339,6 +349,7 @@ export function deleteBetaLog(userId: string): void {
     }
     storage?.removeItem(storageKey(userId, "log"));
     storage?.removeItem(storageKey(userId, "participation"));
+    clearBetaEvidenceOutbox(userId);
     for (const timerKey of timerKeys) storage.removeItem(timerKey);
     notifyParticipationChanged(userId);
   } catch { /* Best effort; UI can surface unavailable storage. */ }

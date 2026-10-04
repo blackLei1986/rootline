@@ -101,3 +101,4 @@ agent/
 data/skills/
 skills/
 skills-lock.json
+.vercel/

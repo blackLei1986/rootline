@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BetaJournal } from "@/components/today/beta-journal";
 import { BetaParticipantControls } from "@/components/beta/beta-participant-controls";
@@ -6,7 +6,7 @@ import { readBetaLog, recordBetaEvent, setBetaParticipation } from "@/lib/beta/v
 
 describe("optional local Beta feedback", () => {
   beforeEach(() => localStorage.clear());
-  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
   it("requires explicit opt-in and explains that data stays in this browser", () => {
     render(<BetaParticipantControls userId="account-a" />);
@@ -84,5 +84,21 @@ describe("optional local Beta feedback", () => {
     fireEvent.click(screen.getByRole("button", {name: "导出验证记录"}));
     expect(createObjectURL).not.toHaveBeenCalled();
     expect(localStorage.getItem("rootline:beta-validation:v1:log:account-a")).toBe("not-json");
+  });
+
+  it("discloses server storage and downloads the authenticated server report in Web Beta mode", async () => {
+    vi.stubEnv("NEXT_PUBLIC_BETA_EVIDENCE_ENABLED", "1");
+    const report = { version: 2, accountId: "account-a", days: [{ learningDate: "2026-10-04" }] };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => report });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const createObjectURL = vi.fn(() => "blob:server-beta-export");
+    vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL: vi.fn() });
+    render(<BetaParticipantControls userId="account-a" />);
+    expect(screen.getByText(/隔离的 Beta 服务器/)).toBeVisible();
+    fireEvent.click(screen.getByRole("checkbox", { name: /加入 7 天 Beta 验证/ }));
+    fireEvent.click(screen.getByRole("button", { name: "导出验证记录" }));
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledOnce());
+    expect(fetchMock).toHaveBeenCalledWith("/api/beta/evidence", expect.objectContaining({ credentials: "same-origin" }));
   });
 });

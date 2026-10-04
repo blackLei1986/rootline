@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deleteBetaLog,
   exportBetaLog,
@@ -10,7 +10,7 @@ import {
 } from "@/lib/beta/validation-store";
 
 describe("private Beta validation store", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => { localStorage.clear(); vi.unstubAllEnvs(); });
 
   it("isolates participation and logs by verified account namespace", () => {
     setBetaParticipation("account-a", true);
@@ -149,5 +149,17 @@ describe("private Beta validation store", () => {
     expect(exported).not.toContain("private-session-1");
     expect(exported).not.toContain("readingCompletionTokens");
     expect(exported).not.toContain("readingObservedTokens");
+  });
+
+  it("queues opted-in evidence under deterministic Today revisions when remote evidence is enabled", () => {
+    vi.stubEnv("NEXT_PUBLIC_BETA_EVIDENCE_ENABLED", "1");
+    setBetaParticipation("account-a", true);
+    recordTodayBetaTransition("account-a", "2026-10-04", 7, { type: "session-started" });
+    recordTodayBetaTransition("account-a", "2026-10-04", 7, { type: "session-started" });
+    const keys = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index));
+    expect(keys.filter((key) => key?.startsWith("rootline:beta-evidence:outbox:v1:account-a:"))).toHaveLength(1);
+    expect(keys).toContain("rootline:beta-evidence:outbox:v1:account-a:today:2026-10-04:7");
+    deleteBetaLog("account-a");
+    expect(Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index)).some((key) => key?.startsWith("rootline:beta-evidence:outbox:v1:account-a:"))).toBe(false);
   });
 });

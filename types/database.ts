@@ -15,6 +15,15 @@ type SharedRow = {
 export interface Database {
   public: {
     Tables: {
+      beta_validation_events: TableDefinition<{
+        user_id: string;
+        event_key: string;
+        learning_date: string;
+        event_type: string;
+        payload: Json;
+        deployment_commit: string;
+        recorded_at: string;
+      }, "user_id" | "event_key" | "learning_date" | "event_type" | "payload" | "deployment_commit">;
       profiles: TableDefinition<UserOwnedRow & {
         display_name: string | null;
         avatar_url: string | null;
