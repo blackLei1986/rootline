@@ -45,4 +45,21 @@ describe("Beta evidence outbox", () => {
     await flushBetaEvidence("user-a", async (record) => { types.push(record.event.type); return true; });
     expect(types).toEqual(["reading-observed", "reading-completed"]);
   });
+
+  it("waits for an active upload and reports failure while any event remains queued", async () => {
+    enqueueBetaEvidence("user-a", "2026-10-04", { type: "today-open" }, "event:550e8400-e29b-41d4-a716-446655440006");
+    let release: ((value: boolean) => void) | undefined;
+    const active = flushBetaEvidence("user-a", () => new Promise<boolean>((resolve) => { release = resolve; }));
+    const joined = flushBetaEvidence("user-a", async () => true);
+    let settled = false;
+    void joined.then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    release?.(false);
+    expect(await active).toBe(false);
+    expect(await joined).toBe(false);
+    expect(localStorage.length).toBe(1);
+    expect(await flushBetaEvidence("user-a", async () => true)).toBe(true);
+    expect(localStorage.length).toBe(0);
+  });
 });

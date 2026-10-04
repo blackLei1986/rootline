@@ -29,7 +29,7 @@ const eventSchema = z.discriminatedUnion("type", [
 ]);
 
 const submissionSchema = z.strictObject({
-  eventKey: z.string().max(80).regex(/^(?:event:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|today:\d{4}-\d{2}-\d{2}:\d+)$/),
+  eventKey: z.string().max(80).regex(/^(?:event:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|today(?:-complete)?:\d{4}-\d{2}-\d{2}:\d+)$/),
   learningDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   event: eventSchema,
 });
@@ -45,7 +45,8 @@ export function parseBetaEvidenceSubmission(input: unknown): BetaEvidenceSubmiss
   const submission = submissionSchema.parse(input);
   const date = new Date(`${submission.learningDate}T00:00:00.000Z`);
   if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== submission.learningDate) throw new Error("Invalid learning date");
-  if (submission.eventKey.startsWith("today:") && !submission.eventKey.startsWith(`today:${submission.learningDate}:`)) throw new Error("Today revision date mismatch");
+  if ((submission.eventKey.startsWith("today:") || submission.eventKey.startsWith("today-complete:"))
+    && !submission.eventKey.includes(`:${submission.learningDate}:`)) throw new Error("Today revision date mismatch");
   if (submission.event.type !== "journal") return submission;
   return {
     ...submission,

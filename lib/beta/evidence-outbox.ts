@@ -2,7 +2,7 @@ import { parseBetaEvidenceSubmission, type BetaEvidenceSubmission } from "@/lib/
 import type { BetaEvent } from "@/lib/beta/validation-store";
 
 const PREFIX = "rootline:beta-evidence:outbox:v1:";
-const inFlight = new Set<string>();
+const inFlight = new Map<string, Promise<boolean>>();
 let enqueueSequence = 0;
 
 function accountPrefix(userId: string): string {
@@ -67,10 +67,12 @@ async function sendToServer(record: BetaEvidenceSubmission): Promise<boolean> {
   } catch { return false; }
 }
 
-export async function flushBetaEvidence(userId: string, sender: (record: BetaEvidenceSubmission) => Promise<boolean> = sendToServer): Promise<void> {
+export async function flushBetaEvidence(userId: string, sender: (record: BetaEvidenceSubmission) => Promise<boolean> = sendToServer): Promise<boolean> {
   const target = storage();
-  if (!target || inFlight.has(userId)) return;
-  inFlight.add(userId);
+  if (!target) return false;
+  const active = inFlight.get(userId);
+  if (active) return active;
+  const run = (async () => {
   try {
     const pending = pendingKeys(userId).flatMap((key) => {
       const raw = target.getItem(key);
@@ -85,9 +87,12 @@ export async function flushBetaEvidence(userId: string, sender: (record: BetaEvi
       if (!await sender(item.record)) break;
       if (target.getItem(item.key) === item.raw) target.removeItem(item.key);
     }
-  } finally {
-    inFlight.delete(userId);
-  }
+    return pendingKeys(userId).length === 0;
+  } catch { return false; }
+  })();
+  inFlight.set(userId, run);
+  try { return await run; }
+  finally { if (inFlight.get(userId) === run) inFlight.delete(userId); }
 }
 
 export function clearBetaEvidenceOutbox(userId: string): void {

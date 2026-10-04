@@ -244,13 +244,13 @@ export function recordBetaEvent(userId: string, learningDate: string, event: Bet
   if (!storage) return;
   try {
     if (hasMalformedBetaLog(userId)) return;
-    queueServerEvidence(userId, learningDate, event, eventKey);
     const log = readBetaLog(userId);
     const readingToken = (event.type === "reading-observed" || event.type === "reading-completed") && event.sessionId ? readingSessionToken(event.sessionId) : null;
     if (event.type === "reading-observed") {
       if (!readingToken || log.readingObservedTokens?.includes(readingToken)) return;
       log.readingObservedTokens = [...(log.readingObservedTokens ?? []), readingToken].slice(-1_000);
       storage.setItem(storageKey(userId, "log"), JSON.stringify(log));
+      queueServerEvidence(userId, learningDate, event, eventKey);
       return;
     }
     if (event.type === "reading-completed" && (!readingToken || !log.readingObservedTokens?.includes(readingToken) || log.readingCompletionTokens?.includes(readingToken))) return;
@@ -311,14 +311,22 @@ export function recordBetaEvent(userId: string, learningDate: string, event: Bet
         break;
     }
     storage.setItem(storageKey(userId, "log"), JSON.stringify(log));
+    queueServerEvidence(userId, learningDate, event, eventKey);
   } catch { /* Quota/private-mode errors are non-blocking. */ }
 }
 
 export function recordTodayBetaTransition(userId: string, learningDate: string, eventRevision: number, event: TodayBetaTransition): void {
   if (!Number.isInteger(eventRevision) || eventRevision < 0 || !getBetaParticipation(userId)) return;
   if (hasMalformedBetaLog(userId)) return;
+  if (event.type === "session-completed") {
+    const priorCompletion = readBetaLog(userId).days.find((item) => item.learningDate === learningDate)?.completedAt;
+    if (priorCompletion) return;
+    const eventKey = `today-complete:${learningDate}:${eventRevision}`;
+    queueServerEvidence(userId, learningDate, event, eventKey);
+    recordBetaEvent(userId, learningDate, event, eventKey);
+    return;
+  }
   const eventKey = `today:${learningDate}:${eventRevision}`;
-  queueServerEvidence(userId, learningDate, event, eventKey);
   const prior = readBetaLog(userId).days.find((item) => item.learningDate === learningDate);
   if (prior?.appliedEventRevisions.includes(eventRevision)) return;
   recordBetaEvent(userId, learningDate, event, eventKey);

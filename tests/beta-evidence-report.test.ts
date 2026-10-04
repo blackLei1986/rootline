@@ -11,6 +11,17 @@ const row = (key: string, date: string, event: Record<string, unknown>, recorded
 });
 
 describe("persisted Beta daily evidence report", () => {
+  it("uses the first completion and never calls client-only telemetry a verified learning day", () => {
+    const events = [
+      row("start", "2026-10-04", { type: "session-started", at: "2026-10-04T01:00:00.000Z" }, "2026-10-04T01:00:00.000Z"),
+      row("done", "2026-10-04", { type: "session-completed", at: "2026-10-04T01:30:00.000Z" }, "2026-10-04T01:30:00.000Z"),
+      row("reopen", "2026-10-04", { type: "session-completed", at: "2026-10-04T09:00:00.000Z" }, "2026-10-04T09:00:00.000Z"),
+    ];
+    const unverified = buildBetaEvidenceReport("account-a", events);
+    expect(unverified.days[0]).toMatchObject({ todayCompletedFromEvents: true, todayCompletionVerified: false, completedAt: "2026-10-04T01:30:00.000Z", totalTodayMilliseconds: 1_800_000 });
+    const verified = buildBetaEvidenceReport("account-a", events, [{ learningDate: "2026-10-04", completedAt: "2026-10-04T01:29:00.000Z" }]);
+    expect(verified.days[0]).toMatchObject({ todayCompletionVerified: true, authoritativeCompletedAt: "2026-10-04T01:29:00.000Z" });
+  });
   it("groups two learning dates without losing prior-day duration, review, Journal or commit", () => {
     const report = buildBetaEvidenceReport("account-a", [
       row("a", "2026-10-04", { type: "plan-observed", targetCount: 30, newWordCount: 23, sourceCounts: { carryover: 7, weak: 2, "root-core": 16, support: 5 } }, "2026-10-04T01:00:00.000Z"),

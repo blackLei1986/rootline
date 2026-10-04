@@ -53,7 +53,7 @@ export function Daily30Flow({ plan, betaUserId }: { plan: TodayPlanDTO; betaUser
       if (reviewTarget) recordTodayBetaTransition(betaUserId, plan.date, s.eventRevision ?? 0, {type: "review-outcome", kind: pending.reviewKind, source: reviewTarget.source, originSource: reviewTarget.originSource, correct: Boolean(pending.correct)});
     }
     revision.current = s.eventRevision ?? 0; setSession(s); if (s.status === "complete") {
-      if (betaUserId) recordBetaEvent(betaUserId, plan.date, {type: "session-completed"});
+      if (betaUserId) recordTodayBetaTransition(betaUserId, plan.date, s.eventRevision ?? 0, {type: "session-completed"});
       setView("complete");
     }
   })().catch(() => { if (active) {setSaveUncertain(true); setError("今日进度暂时无法核对。请重新读取今日进度。");} }); return () => { active = false; }; }, [betaUserId, plan.date, plan.id, targets]);
@@ -105,7 +105,7 @@ export function Daily30Flow({ plan, betaUserId }: { plan: TodayPlanDTO; betaUser
         if (betaTransition?.type === "review-outcome" && accepted && submitted.type === "review_answered" && refreshed.reviewAnswers?.[`${submitted.reviewKind}:${submitted.targetId}`] === submitted.correct) {
           recordTodayBetaTransition(betaUserId, plan.date, refreshed.eventRevision ?? 0, betaTransition);
         }
-        if (refreshed.status === "complete") recordBetaEvent(betaUserId, plan.date, {type: "session-completed"});
+        if (refreshed.status === "complete") recordTodayBetaTransition(betaUserId, plan.date, refreshed.eventRevision ?? 0, {type: "session-completed"});
       }
       if (betaUserId) {
         recordBetaEvent(betaUserId, plan.date, { type: "recoverable-error" });

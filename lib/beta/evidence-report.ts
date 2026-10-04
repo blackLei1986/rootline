@@ -19,6 +19,8 @@ export type ServerBetaDay = {
   startedAt?: string;
   completedAt?: string;
   todayCompletedFromEvents: boolean;
+  todayCompletionVerified: boolean;
+  authoritativeCompletedAt?: string;
   totalTodayMilliseconds: number;
   activeMilliseconds: number;
   activityMilliseconds: Record<string, number>;
@@ -39,14 +41,14 @@ export type ServerBetaDay = {
 function newDay(learningDate: string): ServerBetaDay {
   return {
     learningDate, planObserved: false, plansCreated: 0, targetCount: 0, newWordCount: 0,
-    sourceCounts: {}, todayCompletedFromEvents: false, totalTodayMilliseconds: 0,
+    sourceCounts: {}, todayCompletedFromEvents: false, todayCompletionVerified: false, totalTodayMilliseconds: 0,
     activeMilliseconds: 0, activityMilliseconds: {}, reviewOutcomes: {}, todayOpens: 0,
     readingOpens: 0, readingCompletions: 0, progressOpens: 0, recoverableErrors: 0,
     conflictRecoveries: 0, routeTimings: {}, deploymentCommits: [], eventCount: 0, invalidEventCount: 0,
   };
 }
 
-export function buildBetaEvidenceReport(accountId: string, rows: readonly PersistedBetaEvent[]): { version: 2; accountId: string; days: ServerBetaDay[] } {
+export function buildBetaEvidenceReport(accountId: string, rows: readonly PersistedBetaEvent[], verifiedToday: readonly {learningDate: string; completedAt: string}[] = []): { version: 2; accountId: string; days: ServerBetaDay[] } {
   const days = new Map<string, ServerBetaDay>();
   const observedReading = new Set<string>();
   const completedReading = new Set<string>();
@@ -76,7 +78,7 @@ export function buildBetaEvidenceReport(accountId: string, rows: readonly Persis
       }
       case "session-completed": {
         const at = event.at ?? row.recorded_at;
-        if (!day.completedAt || at > day.completedAt) day.completedAt = at;
+        if (!day.completedAt || at < day.completedAt) day.completedAt = at;
         day.todayCompletedFromEvents = true;
         break;
       }
@@ -112,6 +114,11 @@ export function buildBetaEvidenceReport(accountId: string, rows: readonly Persis
     }
   }
   for (const day of days.values()) {
+    const confirmed = verifiedToday.find((item) => item.learningDate === day.learningDate);
+    if (confirmed) {
+      day.todayCompletionVerified = true;
+      day.authoritativeCompletedAt = confirmed.completedAt;
+    }
     if (day.startedAt && day.completedAt) day.totalTodayMilliseconds = Math.max(0, Date.parse(day.completedAt) - Date.parse(day.startedAt));
     day.deploymentCommits.sort();
   }

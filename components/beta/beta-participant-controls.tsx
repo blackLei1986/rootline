@@ -32,7 +32,7 @@ export function BetaParticipantControls({userId}: {userId: string}) {
       let blob = exportBetaLog(userId);
       let filename = "rootline-beta-validation.json";
       if (remoteEvidence) {
-        await flushBetaEvidence(userId);
+        if (!await flushBetaEvidence(userId)) throw new Error("Pending Beta evidence upload");
         const response = await fetch("/api/beta/evidence", { credentials: "same-origin", cache: "no-store" });
         if (!response.ok) throw new Error("Server evidence unavailable");
         const report: unknown = await response.json();

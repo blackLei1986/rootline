@@ -24,6 +24,18 @@ function session(status: TodaySessionDTO["status"], revision: number): TodaySess
 afterEach(() => {cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); window.localStorage.clear(); resetProgress();});
 
 describe("Today ambiguous save recovery", () => {
+  it("does not create a second Beta completion when a completed Today page reopens", async () => {
+    setBetaParticipation("beta-account", true);
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => session("complete", 30) })));
+    const first = render(<Daily30Flow plan={plan} betaUserId="beta-account" />);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "1 / 1" })).toBeVisible());
+    const completedAt = readBetaLog("beta-account").days[0].completedAt;
+    expect(completedAt).toBeTruthy();
+    first.unmount();
+    render(<Daily30Flow plan={plan} betaUserId="beta-account" />);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "1 / 1" })).toBeVisible());
+    expect(readBetaLog("beta-account").days[0].completedAt).toBe(completedAt);
+  });
   it("excludes a pending save from active learning duration", async () => {
     setBetaParticipation("beta-account", true);
     let now = 0;

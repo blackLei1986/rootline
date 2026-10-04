@@ -36,6 +36,22 @@ describe("private Beta validation store", () => {
     expect(JSON.stringify(log)).not.toContain('"events"');
   });
 
+  it("does not enqueue rejected Reading completions before a consent-bound observation", () => {
+    vi.stubEnv("NEXT_PUBLIC_BETA_EVIDENCE_ENABLED", "1");
+    setBetaParticipation("account-a", true);
+    recordBetaEvent("account-a", "2026-10-04", { type: "reading-completed", sessionId: "session-1" });
+    expect(Object.keys(localStorage).filter((key) => key.startsWith("rootline:beta-evidence:outbox:"))).toHaveLength(0);
+  });
+
+  it("keeps a confirmed Today completion at one server event across same-revision reopen", () => {
+    vi.stubEnv("NEXT_PUBLIC_BETA_EVIDENCE_ENABLED", "1");
+    setBetaParticipation("account-a", true);
+    recordTodayBetaTransition("account-a", "2026-10-04", 30, { type: "session-completed", at: "2026-10-04T01:30:00.000Z" });
+    recordTodayBetaTransition("account-a", "2026-10-04", 30, { type: "session-completed", at: "2026-10-04T09:00:00.000Z" });
+    expect(readBetaLog("account-a").days[0].completedAt).toBe("2026-10-04T01:30:00.000Z");
+    expect(Object.keys(localStorage).filter((key) => key.startsWith("rootline:beta-evidence:outbox:")).length).toBe(1);
+  });
+
   it("rejects impossible learning dates rather than creating malformed daily aggregates", () => {
     setBetaParticipation("account-a", true);
     recordBetaEvent("account-a", "2026-99-99", {type: "plan-observed", targetCount: 30});

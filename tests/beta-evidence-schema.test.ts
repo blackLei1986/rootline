@@ -43,6 +43,12 @@ describe("Beta server evidence input", () => {
       learningDate: "2026-10-04",
       event: { type: "session-started" },
     }).eventKey).toBe("today:2026-10-04:17");
+    expect(parseBetaEvidenceSubmission({
+      eventKey: "today-complete:2026-10-04:17",
+      learningDate: "2026-10-04",
+      event: { type: "session-completed" },
+    }).eventKey).toBe("today-complete:2026-10-04:17");
+    expect(() => parseBetaEvidenceSubmission({ ...base, eventKey: "today-complete:2026-10-05:17", event: { type: "session-completed" } })).toThrow();
     expect(() => parseBetaEvidenceSubmission({ ...base, eventKey: "../../private", event: { type: "today-open" } })).toThrow();
   });
 });

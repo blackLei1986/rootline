@@ -12,6 +12,7 @@ export const runtime = "nodejs";
 const noStore = { "cache-control": "private, no-store" };
 
 export async function GET(request: Request) {
+  if (process.env.NEXT_PUBLIC_BETA_EVIDENCE_ENABLED !== "1") return NextResponse.json({ error: "Not found" }, { status: 404, headers: noStore });
   const viewer = await requireVerifiedViewerHttp();
   if (viewer instanceof NextResponse) return viewer;
   const date = new URL(request.url).searchParams.get("date");
@@ -33,10 +34,34 @@ export async function GET(request: Request) {
     if ((result.data ?? []).length < 500) break;
   }
   if (rows.length >= 10_000) return NextResponse.json({ error: "Evidence export exceeds limit" }, { status: 413, headers: noStore });
-  return NextResponse.json(buildBetaEvidenceReport(viewer.userId, rows), { headers: noStore });
+  if (rows.length === 0) return NextResponse.json(buildBetaEvidenceReport(viewer.userId, rows), { headers: noStore });
+  const dates = [...new Set(rows.map((row) => row.learning_date))];
+  const plans = await client.from("today_plans")
+    .select("id,learning_date,status,completed_at")
+    .eq("user_id", viewer.userId)
+    .in("learning_date", dates)
+    .range(0, 999);
+  if (plans.error || (plans.data?.length ?? 0) >= 1_000) return NextResponse.json({ error: "Today verification unavailable" }, { status: 503, headers: noStore });
+  const completedPlans = (plans.data ?? []).filter((plan) => plan.status === "complete" && plan.completed_at);
+  if (completedPlans.length === 0) return NextResponse.json(buildBetaEvidenceReport(viewer.userId, rows), { headers: noStore });
+  const sessions = await client.from("today_sessions")
+    .select("plan_id,status,completed_at")
+    .eq("user_id", viewer.userId)
+    .in("plan_id", completedPlans.map((plan) => plan.id))
+    .range(0, 999);
+  if (sessions.error || (sessions.data?.length ?? 0) >= 1_000) return NextResponse.json({ error: "Today verification unavailable" }, { status: 503, headers: noStore });
+  const completedSessions = new Map((sessions.data ?? [])
+    .filter((session) => session.status === "complete" && session.completed_at)
+    .map((session) => [session.plan_id, session.completed_at!]));
+  const verifiedToday = completedPlans.flatMap((plan) => {
+    const completedAt = completedSessions.get(plan.id);
+    return completedAt ? [{ learningDate: plan.learning_date, completedAt }] : [];
+  });
+  return NextResponse.json(buildBetaEvidenceReport(viewer.userId, rows, verifiedToday), { headers: noStore });
 }
 
 export async function POST(request: Request) {
+  if (process.env.NEXT_PUBLIC_BETA_EVIDENCE_ENABLED !== "1") return NextResponse.json({ error: "Not found" }, { status: 404, headers: noStore });
   const viewer = await requireVerifiedViewerHttp();
   if (viewer instanceof NextResponse) return viewer;
 
