@@ -6,7 +6,7 @@ const TIMER_PREFIX = "rootline:beta-validation:timer:v1:";
 const DOCUMENT_TOKEN = crypto.randomUUID();
 const ACTIVITIES = new Set<BetaActivity>(["block-a", "block-b", "block-c", "mini-review-a", "mini-review-b", "mini-review-c", "final-review"]);
 
-function key(userId: string): string { return `${TIMER_PREFIX}${encodeURIComponent(userId)}`; }
+function key(userId: string): string { return `${TIMER_PREFIX}${encodeURIComponent(userId)}:${DOCUMENT_TOKEN}`; }
 function read(userId: string): TimerState | null {
   try {
     const raw = window.localStorage.getItem(key(userId));

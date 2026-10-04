@@ -102,7 +102,7 @@ describe("private Beta validation store", () => {
     const {startBetaActivity} = await import("@/lib/beta/validation-timer");
     setBetaParticipation("account-a", true);
     startBetaActivity("account-a", "2026-09-26", "block-a");
-    expect(localStorage.getItem("rootline:beta-validation:timer:v1:account-a")).not.toBeNull();
+    expect(Array.from({length: localStorage.length}, (_, index) => localStorage.key(index)).some((key) => key?.startsWith("rootline:beta-validation:timer:v1:account-a:"))).toBe(true);
     deleteBetaLog("account-a");
     setBetaParticipation("account-a", true);
     const {pauseBetaActivity} = await import("@/lib/beta/validation-timer");
@@ -122,9 +122,30 @@ describe("private Beta validation store", () => {
     expect(readBetaLog("account-a").days[0].reviewOutcomes["mini:carryover:root-core"]).toEqual({ correct: 0, total: 1 });
   });
 
+  it("counts distinct confirmed review revisions even when responses arrive out of order", () => {
+    setBetaParticipation("account-a", true);
+    recordTodayBetaTransition("account-a", "2026-09-26", 9, {type: "review-outcome", kind: "final", source: "support", correct: true});
+    recordTodayBetaTransition("account-a", "2026-09-26", 8, {type: "review-outcome", kind: "mini", source: "support", correct: false});
+    recordTodayBetaTransition("account-a", "2026-09-26", 8, {type: "review-outcome", kind: "mini", source: "support", correct: false});
+    const outcomes = readBetaLog("account-a").days[0].reviewOutcomes;
+    expect(outcomes["final:support:support"]).toEqual({correct: 1, total: 1});
+    expect(outcomes["mini:support:support"]).toEqual({correct: 0, total: 1});
+  });
+
   it("keeps new-word totals separate from original source counts", () => {
     setBetaParticipation("account-a", true);
     recordBetaEvent("account-a", "2026-09-26", {type: "plan-observed", targetCount: 30, newWordCount: 20, sourceCounts: {carryover: 5, weak: 5, "root-core": 12, support: 13}});
     expect(readBetaLog("account-a").days[0]).toMatchObject({newWordCount: 20, sourceCounts: {carryover: 5, weak: 5, "root-core": 12, support: 13}});
+  });
+
+  it("counts a Reading session once across dates without exporting its deduplication token", async () => {
+    setBetaParticipation("account-a", true);
+    recordBetaEvent("account-a", "2026-09-26", {type: "reading-completed", sessionId: "private-session-1"});
+    recordBetaEvent("account-a", "2026-09-27", {type: "reading-completed", sessionId: "private-session-1"});
+    expect(readBetaLog("account-a").days.reduce((sum, day) => sum + day.readingCompletions, 0)).toBe(1);
+    expect(readBetaLog("account-a").days).toHaveLength(1);
+    const exported = await exportBetaLog("account-a").text();
+    expect(exported).not.toContain("private-session-1");
+    expect(exported).not.toContain("readingCompletionTokens");
   });
 });

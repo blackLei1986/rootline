@@ -14,7 +14,7 @@
 
 - Store no Phase 5 telemetry before account opt-in.
 - Keep telemetry local to one browser and namespace it by the verified account ID; omit that ID from export.
-- Do not store article identifiers/content/URLs, vocabulary identifiers, answers, email, or raw user identifiers.
+- Do not collect article identifiers/content/URLs, vocabulary identifiers, answers, email, or raw user identifiers in automatic telemetry. The participant-authored optional journal note is local free text and cannot be guaranteed free of arbitrary sensitive prose.
 - Preserve optional Reading, the frozen 30-word capacity, SRS behavior, account isolation, and Today completion semantics.
 - Never count automated tests, fixtures, or developer shortcuts as real-use Beta days.
 - Report unobserved dates distinctly from incomplete observed plans.
@@ -26,7 +26,7 @@
 1. Account switching or logout must never expose another participant's local journal or validation log.
 2. Refresh, hidden tabs, browser close, and leaving Today must not inflate active learning duration or lose accumulated duration.
 3. A learner who skips the journal must still retain the same completed Today state.
-4. Export must exclude email, account ID, article/word IDs, URLs, titles, content, and answer strings.
+4. Automatic fields in export must exclude email, account ID, article/word IDs, URLs, titles, content, and answer strings. The optional participant-authored note is exported as feedback after bounded pattern redaction; the UI warns that arbitrary titles, answers, and personal details cannot be recognized reliably.
 5. Plan dates with no observed session must not be counted as incomplete learning days.
 
 ## File and interface map

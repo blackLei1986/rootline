@@ -25,9 +25,10 @@ export type BetaDay = {
   routeTimings: Record<string, number[]>;
   journal?: BetaJournal;
   lastEventRevision?: number;
+  appliedEventRevisions: number[];
 };
 
-export type BetaValidationLog = { version: 1; days: BetaDay[] };
+export type BetaValidationLog = { version: 1; days: BetaDay[]; readingCompletionTokens?: string[] };
 
 export type BetaEvent =
   | { type: "plan-observed"; targetCount: number; newWordCount?: number; sourceCounts?: Record<string, number> }
@@ -38,7 +39,7 @@ export type BetaEvent =
   | { type: "review-outcome"; kind: "mini" | "final"; source: string; originSource?: "root-core" | "support"; correct: boolean }
   | { type: "reading-open" }
   | { type: "today-open" }
-  | { type: "reading-completed" }
+  | { type: "reading-completed"; sessionId: string }
   | { type: "progress-open" }
   | { type: "recoverable-error" }
   | { type: "conflict-recovery" }
@@ -132,9 +133,25 @@ function normalizeLog(value: unknown): BetaValidationLog | null {
       }
     }
     if (Number.isInteger(input.lastEventRevision) && (input.lastEventRevision as number) >= 0) day.lastEventRevision = input.lastEventRevision as number;
+    if (Array.isArray(input.appliedEventRevisions)) {
+      day.appliedEventRevisions = [...new Set(input.appliedEventRevisions.filter((revision): revision is number => Number.isInteger(revision) && revision >= 0 && revision <= 1_000_000))].slice(-1_000);
+    } else if (day.lastEventRevision !== undefined) day.appliedEventRevisions = [day.lastEventRevision];
     days.push(day);
   }
-  return {version: 1, days};
+  const readingCompletionTokens = Array.isArray(candidate.readingCompletionTokens)
+    ? [...new Set(candidate.readingCompletionTokens.filter((token): token is string => typeof token === "string" && /^[0-9a-f]{16}$/.test(token)))].slice(-1_000)
+    : undefined;
+  return readingCompletionTokens ? {version: 1, days, readingCompletionTokens} : {version: 1, days};
+}
+
+function readingSessionToken(sessionId: string): string {
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  for (const byte of new TextEncoder().encode(sessionId)) {
+    first = Math.imul(first ^ byte, 0x01000193);
+    second = Math.imul(second ^ byte, 0x85ebca6b);
+  }
+  return [first, second].map((part) => (part >>> 0).toString(16).padStart(8, "0")).join("");
 }
 
 export function getBetaParticipation(userId: string): boolean {
@@ -189,7 +206,7 @@ export function hasMalformedBetaLog(userId: string): boolean {
 }
 
 function newDay(learningDate: string): BetaDay {
-  return { learningDate, planObserved: false, plansCreated: 0, targetCount: 0, newWordCount: 0, activeMilliseconds: 0, activityMilliseconds: {}, sourceCounts: {}, reviewOutcomes: {}, todayOpens: 0, readingOpens: 0, readingCompletions: 0, progressOpens: 0, recoverableErrors: 0, conflictRecoveries: 0, routeTimings: {} };
+  return { learningDate, planObserved: false, plansCreated: 0, targetCount: 0, newWordCount: 0, activeMilliseconds: 0, activityMilliseconds: {}, sourceCounts: {}, reviewOutcomes: {}, todayOpens: 0, readingOpens: 0, readingCompletions: 0, progressOpens: 0, recoverableErrors: 0, conflictRecoveries: 0, routeTimings: {}, appliedEventRevisions: [] };
 }
 
 function finiteCount(value: unknown): number {
@@ -217,6 +234,8 @@ export function recordBetaEvent(userId: string, learningDate: string, event: Bet
   try {
     if (hasMalformedBetaLog(userId)) return;
     const log = readBetaLog(userId);
+    const readingToken = event.type === "reading-completed" && event.sessionId ? readingSessionToken(event.sessionId) : null;
+    if (event.type === "reading-completed" && (!readingToken || log.readingCompletionTokens?.includes(readingToken))) return;
     const day = log.days.find((item) => item.learningDate === learningDate) ?? newDay(learningDate);
     if (!log.days.includes(day)) log.days.push(day);
     switch (event.type) {
@@ -249,7 +268,12 @@ export function recordBetaEvent(userId: string, learningDate: string, event: Bet
       }
       case "reading-open": day.readingOpens++; break;
       case "today-open": day.todayOpens++; break;
-      case "reading-completed": day.readingCompletions++; break;
+      case "reading-completed": {
+        if (!readingToken) break;
+        log.readingCompletionTokens = [...(log.readingCompletionTokens ?? []), readingToken].slice(-1_000);
+        day.readingCompletions++;
+        break;
+      }
       case "progress-open": day.progressOpens++; break;
       case "recoverable-error": day.recoverableErrors++; break;
       case "conflict-recovery": day.conflictRecoveries++; break;
@@ -276,26 +300,36 @@ export function recordTodayBetaTransition(userId: string, learningDate: string, 
   if (!Number.isInteger(eventRevision) || eventRevision < 0 || !getBetaParticipation(userId)) return;
   if (hasMalformedBetaLog(userId)) return;
   const prior = readBetaLog(userId).days.find((item) => item.learningDate === learningDate);
-  if (prior?.lastEventRevision !== undefined && eventRevision <= prior.lastEventRevision) return;
+  if (prior?.appliedEventRevisions.includes(eventRevision)) return;
   recordBetaEvent(userId, learningDate, event);
   const next = readBetaLog(userId);
   const day = next.days.find((item) => item.learningDate === learningDate);
   if (!day) return;
-  day.lastEventRevision = eventRevision;
+  day.appliedEventRevisions.push(eventRevision);
+  day.appliedEventRevisions = day.appliedEventRevisions.slice(-1_000);
+  day.lastEventRevision = Math.max(day.lastEventRevision ?? 0, eventRevision);
   try { safeStorage()?.setItem(storageKey(userId, "log"), JSON.stringify(next)); } catch { /* Optional measurement. */ }
 }
 
 
 export function exportBetaLog(userId: string): Blob {
-  return new Blob([JSON.stringify(readBetaLog(userId), null, 2)], { type: "application/json" });
+  const {version, days} = readBetaLog(userId);
+  return new Blob([JSON.stringify({version, days}, null, 2)], { type: "application/json" });
 }
 
 export function deleteBetaLog(userId: string): void {
   try {
     const storage = safeStorage();
+    if (!storage) return;
+    const timerPrefix = `${TIMER_PREFIX}${encodeURIComponent(userId)}`;
+    const timerKeys: string[] = [];
+    for (let index = 0; index < storage.length; index++) {
+      const candidate = storage.key(index);
+      if (candidate === timerPrefix || candidate?.startsWith(`${timerPrefix}:`)) timerKeys.push(candidate);
+    }
     storage?.removeItem(storageKey(userId, "log"));
     storage?.removeItem(storageKey(userId, "participation"));
-    storage?.removeItem(`${TIMER_PREFIX}${encodeURIComponent(userId)}`);
+    for (const timerKey of timerKeys) storage.removeItem(timerKey);
     notifyParticipationChanged(userId);
   } catch { /* Best effort; UI can surface unavailable storage. */ }
 }

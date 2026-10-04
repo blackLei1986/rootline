@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { hydrateAuthoritativeWordState } from "@/lib/storage";
 import { flushSyncQueue, listPendingWordOperations } from "@/lib/sync/offline-queue";
 import type { PublicSession, ReadingOutcome } from "@/lib/reading/reinforcement/types";
@@ -16,6 +16,14 @@ export function ReadingReinforcement({initialSession, betaUserId}: {initialSessi
   const [feedback, setFeedback] = useState<ReadingOutcome | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const answerRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!betaUserId || session.status !== "complete") return;
+    const latestAnswer = session.outcomes.map((item) => Date.parse(item.answeredAt)).filter(Number.isFinite).sort((a, b) => b - a)[0];
+    const today = latestAnswer === undefined ? new Date() : new Date(latestAnswer);
+    const learningDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    recordBetaEvent(betaUserId, learningDate, {type: "reading-completed", sessionId: session.id});
+  }, [betaUserId, session]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -47,11 +55,6 @@ export function ReadingReinforcement({initialSession, betaUserId}: {initialSessi
       const outcome = body.session.outcomes.find((item) => item.questionId === question.id);
       if (!outcome) throw new Error("Confirmed answer is missing.");
       if (body.wordState?.wordId === question.wordId) hydrateAuthoritativeWordState(question.wordId, body.wordState);
-      if (betaUserId && session.status !== "complete" && body.session.status === "complete") {
-        const today = new Date();
-        const learningDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-        recordBetaEvent(betaUserId, learningDate, {type: "reading-completed"});
-      }
       setSession(body.session);
       setFeedback(outcome);
       setAnswer("");

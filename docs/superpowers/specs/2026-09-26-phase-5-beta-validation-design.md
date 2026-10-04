@@ -32,7 +32,7 @@ Prepare a minimal, privacy-preserving way to observe seven real learning days an
 - Storage unavailable or malformed: disable collection and show a plain recoverable message; learning continues normally.
 - Opt-out/delete: remove only this account's Phase 5 local validation keys. Do not touch learning progress, Today plans, or server state.
 - Export failure: keep the local record and show a retry message.
-- No article content, URL, title, word ID, answer text, email, or user ID is stored in the Phase 5 record/export.
+- Automatic Phase 5 telemetry stores no article content, URL, title, word ID, answer text, email, or user ID. Optional participant-authored free text is stored locally and may contain arbitrary details despite bounded redaction; the UI must clearly warn the participant before saving/exporting.
 - No migrations, service-role writes, network analytics calls, or external publication are part of this design.
 
 ## Evaluation limits

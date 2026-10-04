@@ -58,4 +58,16 @@ describe("foreground Beta activity timer", () => {
     reloaded.pauseBetaActivity("user-a", "2026-09-26");
     expect(readBetaLog("user-a").days[0].activeMilliseconds).toBe(1_000);
   });
+
+  it("keeps concurrent documents' timers separate for the same account", async () => {
+    startBetaActivity("user-a", "2026-09-26", "block-a");
+    vi.advanceTimersByTime(1_000);
+    vi.resetModules();
+    const otherTab = await import("@/lib/beta/validation-timer");
+    otherTab.startBetaActivity("user-a", "2026-09-26", "block-b");
+    vi.advanceTimersByTime(1_000);
+    pauseBetaActivity("user-a", "2026-09-26");
+    otherTab.pauseBetaActivity("user-a", "2026-09-26");
+    expect(readBetaLog("user-a").days[0].activeMilliseconds).toBe(3_000);
+  });
 });

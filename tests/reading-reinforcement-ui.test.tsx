@@ -59,6 +59,26 @@ describe("optional reading reinforcement UI", () => {
     expect(readBetaLog("beta-user").days.reduce((sum, day) => sum + day.readingCompletions, 0)).toBe(1);
   });
 
+  it("recovers a server-confirmed Reading completion after a lost final response without double counting", async () => {
+    localStorage.clear();
+    setBetaParticipation("beta-user", true);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("response lost")));
+    const view = render(<ReadingReinforcement initialSession={base} betaUserId="beta-user" />);
+    fireEvent.change(screen.getByRole("textbox", {name: "你的答案"}), {target: {value: "adapt"}});
+    fireEvent.click(screen.getByRole("button", {name: "提交答案"}));
+    await screen.findByRole("alert");
+    expect(readBetaLog("beta-user").days).toHaveLength(0);
+    view.unmount();
+
+    const completed: PublicSession = {...base, status: "complete", cursor: 2, practiced: 2, currentQuestion: null,
+      outcomes: [{questionId: "q1", wordId: "adapt", submittedAnswer: "adapt", correct: true, correctDisplay: "adapt", answeredAt: "2026-09-26T08:00:00.000Z"}]};
+    const reopened = render(<ReadingReinforcement initialSession={completed} betaUserId="beta-user" />);
+    await waitFor(() => expect(readBetaLog("beta-user").days.reduce((sum, day) => sum + day.readingCompletions, 0)).toBe(1));
+    reopened.unmount();
+    render(<ReadingReinforcement initialSession={completed} betaUserId="beta-user" />);
+    expect(readBetaLog("beta-user").days.reduce((sum, day) => sum + day.readingCompletions, 0)).toBe(1);
+  });
+
   it("renders a persisted cursor and a read-only completed result", () => {
     const resumed = {...base, cursor: 1, practiced: 1, correct: 0,
       currentQuestion: {id: "q2", wordId: "explain", type: "recall" as const, context: "They explain findings.", prompt: "写出原形。"}};
