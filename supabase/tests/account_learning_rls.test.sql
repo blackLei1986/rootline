@@ -1,6 +1,19 @@
 begin;
 
-select plan(5);
+select plan(10);
+
+select ok(
+  not has_function_privilege('anon', 'public.handle_new_user()', 'execute'),
+  'anonymous role cannot call the privileged registration trigger directly'
+);
+select ok(
+  not has_function_privilege('authenticated', 'public.handle_new_user()', 'execute'),
+  'signed-in role cannot call the privileged registration trigger directly'
+);
+select ok(
+  has_function_privilege('service_role', 'public.handle_new_user()', 'execute'),
+  'trusted service role retains registration trigger execution'
+);
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password,
@@ -9,6 +22,19 @@ insert into auth.users (
 ) values
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000001', 'authenticated', 'authenticated', 'owner@example.com', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000002', 'authenticated', 'authenticated', 'other@example.com', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now());
+
+select results_eq(
+  $$ select count(*) from public.profiles where user_id in
+    ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002') $$,
+  array[2::bigint],
+  'registration trigger still creates both profiles'
+);
+select results_eq(
+  $$ select count(*) from public.user_preferences where user_id in
+    ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002') $$,
+  array[2::bigint],
+  'registration trigger still creates both preference rows'
+);
 
 insert into public.word_learning_states (user_id, word_id, state)
 values ('00000000-0000-0000-0000-000000000001', 'inspect', '{}'::jsonb);
